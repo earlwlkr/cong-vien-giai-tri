@@ -13,16 +13,42 @@
   <body>
     <canvas id="game"></canvas>
 
-    <div id="join" class="overlay">
+    <div id="join" class="overlay mode-first">
       <div class="card">
-        <div class="logo"><i data-s="coaster"></i><i data-s="wheel"></i><i data-s="horse"></i></div>
-        <h1>Công Viên Giải Trí</h1>
-        <p class="sub">Dạo chơi, trò chuyện, ăn kem uống nước mía và thử tàu lượn siêu tốc cùng mọi người!</p>
-        <label>Tên của bạn</label>
-        <input id="nameInput" maxlength="18" placeholder="Nhập tên..." autocomplete="off" />
-        <label>Màu áo</label>
-        <div id="colors"></div>
-        <button id="joinBtn" class="primary">Vào công viên <i data-s="play"></i></button>
+        <div class="intro">
+          <div class="logo"><i data-s="coaster"></i><i data-s="wheel"></i><i data-s="horse"></i></div>
+          <h1>Công Viên Giải Trí</h1>
+          <p class="sub">Dạo chơi, trò chuyện, ăn kem uống nước mía và thử tàu lượn siêu tốc cùng mọi người!</p>
+        </div>
+        <h2 class="editTitle"><i data-s="pencil"></i> Sửa nhân vật</h2>
+        <div id="maker">
+          <label for="nameInput">Tên của bạn</label>
+          <input id="nameInput" maxlength="18" placeholder="Nhập tên..." autocomplete="off" />
+          <div class="lookRow">
+            <canvas id="lookPreview" title="Kéo để xoay"></canvas>
+            <div class="lookOpts">
+              <label>Kiểu tóc</label>
+              <div id="optStyle" class="chips"></div>
+              <label>Màu da</label>
+              <div id="optSkin" class="swatches"></div>
+              <label>Màu tóc</label>
+              <div id="optHair" class="swatches"></div>
+            </div>
+          </div>
+          <label>Màu áo</label>
+          <div id="colors" class="swatches"></div>
+          <label>Màu giày</label>
+          <div id="optShoes" class="swatches"></div>
+          <div class="actions">
+            <button id="randomBtn" class="ghost" title="Ngẫu nhiên"><i data-s="star"></i> Ngẫu nhiên</button>
+            <button id="cancelBtn" class="ghost">Hủy</button>
+            <button id="joinBtn" class="primary">Vào công viên <i data-s="play"></i></button>
+          </div>
+        </div>
+        <div id="resume">
+          <div id="resumeMsg">Đang vào lại công viên…</div>
+          <button id="retryBtn" class="primary hidden">Thử lại <i data-s="play"></i></button>
+        </div>
         <div id="joinStatus" class="status"></div>
         <details class="help">
           <summary>Hướng dẫn điều khiển</summary>
@@ -64,6 +90,7 @@
         <div class="btnRow">
           <button class="round" id="camBtn" title="Đổi góc nhìn (V)"><i data-s="eye"></i></button>
           <button class="round" id="soundBtn" title="Âm thanh"><i data-s="sound"></i></button>
+          <button class="round" id="editBtn" title="Sửa tên và nhân vật"><i data-s="pencil"></i></button>
         </div>
       </div>
 

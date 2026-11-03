@@ -4,6 +4,8 @@ import { ConvexClient } from "convex/browser";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import { Avatar, Pose, HIP_HEIGHT, EYE_HEIGHT, EYE_OFFSET } from "./avatar";
+import { CharacterMaker } from "./maker";
+import { Look, lookFromSeed, lookKey, randomLook } from "../convex/looks";
 import { Input } from "./input";
 import { Sfx } from "./audio";
 import { isTouch, damp, dampAngle, BoxCollider, Collider } from "./util";
@@ -33,6 +35,7 @@ type PlayerDoc = {
   anim: string;
   ride: Ride | null;
   held: Held | null;
+  look: Look | null;
   lastSeen: number;
 };
 type RideResult = { ok: boolean; done: boolean; speed?: number; g?: number; waiting?: number; lift?: boolean; height?: number; left?: number };
@@ -128,6 +131,8 @@ let joined = false;
 let myId: Id<"players"> | null = null;
 let myName = "";
 let myColor = "#ff4e7a";
+let myLook: Look = randomLook();
+let editing = false;
 let myAvatar: Avatar | null = null;
 let camMode: "tp" | "fp" = "tp";
 let camYaw = Math.PI, camPitch = -0.22, camDist = 6;
@@ -148,7 +153,9 @@ let shopCamActive = false;
 // ---------------- Xu wallet (per device; refills every 6h) ----------------
 const WALLET_KEY = "cvgt-wallet";
 let walletToken = localStorage.getItem(WALLET_KEY) || "";
-if (!/^[A-Za-z0-9-]{16,64}$/.test(walletToken)) {
+/** The same token identifies the device's saved profile (name, look, last position). */
+const returning = /^[A-Za-z0-9-]{16,64}$/.test(walletToken);
+if (!returning) {
   walletToken = crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
   localStorage.setItem(WALLET_KEY, walletToken);
 }
@@ -195,6 +202,7 @@ interface Remote {
   held: Held | null;
   name: string;
   color: string;
+  lookKey: string;
 }
 const remotes = new Map<string, Remote>();
 let latestPlayers: PlayerDoc[] = [];
@@ -208,15 +216,16 @@ function syncRemotes(list: PlayerDoc[]) {
     if (now - p.lastSeen > 20000) continue;
     seen.add(p._id);
     let r = remotes.get(p._id);
-    if (r && (r.name !== p.name || r.color !== p.color)) {
+    const look = p.look ?? lookFromSeed(p._id + p.color);
+    if (r && (r.name !== p.name || r.color !== p.color || r.lookKey !== lookKey(look))) {
       r.avatar.dispose();
       remotes.delete(p._id);
       r = undefined;
     }
     if (!r) {
-      const avatar = new Avatar(p.name, p.color, p._id);
+      const avatar = new Avatar(p.name, p.color, look);
       scene.add(avatar.group);
-      r = { avatar, pos: new THREE.Vector3(p.x, p.y, p.z), target: new THREE.Vector3(), yaw: p.ry, targetYaw: p.ry, anim: p.anim, ride: null, held: p.held, name: p.name, color: p.color };
+      r = { avatar, pos: new THREE.Vector3(p.x, p.y, p.z), target: new THREE.Vector3(), yaw: p.ry, targetYaw: p.ry, anim: p.anim, ride: null, held: p.held, name: p.name, color: p.color, lookKey: lookKey(look) };
       remotes.set(p._id, r);
     }
     const prev = r.held, held = p.held ?? null;
@@ -285,7 +294,8 @@ async function rejoin() {
   if (!client) return;
   if (myRide) leaveRideLocal();
   myHeld = null;
-  myId = await client.mutation(api.players.join, { name: myName, color: myColor, x: me.pos.x, z: me.pos.z });
+  const r = await client.mutation(api.players.join, { token: walletToken, fallback: spawnPoint(), at: { x: me.pos.x, z: me.pos.z, ry: me.yaw } });
+  if (r) myId = r.id;
 }
 
 // ---------------- chat ----------------
@@ -313,7 +323,7 @@ function addChatLine(name: string | null, color: string, text: string, rich = fa
   setTimeout(() => d.classList.add("old"), 12000);
 }
 function openChat() {
-  if (!joined) return;
+  if (!joined || editing) return;
   chatForm.classList.remove("hidden");
   $("chat").classList.add("open");
   chatInput.focus();
@@ -385,6 +395,10 @@ function setRidingUI(on: boolean) {
 
 input.onKey = (code) => {
   if (!joined) return;
+  if (editing) {
+    if (code === "Escape") closeEditor();
+    return;
+  }
   if (shopCart) {
     if (code === "Escape" || code === "KeyQ" || code === "KeyE") closeShop();
     else if (/^(Digit|Numpad)[1-9]$/.test(code)) {
@@ -519,6 +533,7 @@ function openShop(c: Cart) {
   b.textContent = c.seller.name + ": ";
   sel.append(b, `“${line}”`);
   renderShop();
+  document.body.classList.add("shopping");
   show("shop", true);
   show("prompt", false);
   sfx.chime();
@@ -527,6 +542,7 @@ function closeShop() {
   if (!shopCart) return;
   shopCart = null;
   shopCamActive = false;
+  document.body.classList.remove("shopping");
   show("shop", false);
 }
 function renderShop() {
@@ -755,90 +771,185 @@ function renderBoard() {
   b.appendChild(ol);
 }
 
-// ---------------- join ----------------
-const COLORS = ["#ff4e7a", "#ff9f1c", "#ffd166", "#06d6a0", "#2ec4b6", "#3a86ff", "#8338ec", "#f72585", "#8d99ae", "#e63946"];
-const colorsEl = $("colors");
-myColor = localStorage.getItem("cvgt-color") || COLORS[Math.floor(Math.random() * COLORS.length)];
-for (const c of COLORS) {
-  const sw = document.createElement("div");
-  sw.className = "sw" + (c === myColor ? " sel" : "");
-  sw.style.background = c;
-  sw.onclick = () => {
-    myColor = c;
-    colorsEl.querySelectorAll(".sw").forEach((e) => e.classList.remove("sel"));
-    sw.classList.add("sel");
-  };
-  colorsEl.appendChild(sw);
-}
+// ---------------- join / character ----------------
+const maker = new CharacterMaker();
+if (import.meta.env.DEV) (window as any).__maker = maker;
+const joinEl = $("join");
+const joinBtn = $("joinBtn") as HTMLButtonElement;
 const nameInput = $("nameInput") as HTMLInputElement;
-nameInput.value = localStorage.getItem("cvgt-name") || "";
-nameInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") join();
-});
-$("joinBtn").addEventListener("click", () => join());
+function setJoinMode(m: "first" | "edit" | "resume") {
+  joinEl.classList.remove("mode-first", "mode-edit", "mode-resume");
+  joinEl.classList.add("mode-" + m);
+  maker.setActive(m !== "resume");
+  setRich(joinBtn, m === "edit" ? "Lưu {star}" : "Vào công viên {play}");
+  joinBtn.disabled = false;
+  $("joinStatus").textContent = "";
+}
+const spawnPoint = () => ({ x: (Math.random() - 0.5) * 6, z: 84 + Math.random() * 4 });
+// browsers only allow sound after a tap / key press; returning players skip the join button
+for (const ev of ["pointerdown", "keydown"]) window.addEventListener(ev, () => sfx.init(), { once: true, capture: true });
 
-async function join() {
-  const btn = $("joinBtn") as HTMLButtonElement;
-  if (btn.disabled) return;
-  myName = nameInput.value.trim().slice(0, 18) || "Khách " + Math.floor(100 + Math.random() * 900);
-  localStorage.setItem("cvgt-name", nameInput.value.trim());
-  localStorage.setItem("cvgt-color", myColor);
-  sfx.init();
+nameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") submitMaker();
+  else if (e.key === "Escape" && editing) closeEditor();
+});
+joinBtn.addEventListener("click", () => submitMaker());
+$("cancelBtn").addEventListener("click", () => closeEditor());
+$("retryBtn").addEventListener("click", () => resume());
+$("editBtn").addEventListener("click", () => openEditor());
+
+function openEditor() {
+  if (!joined || editing) return;
+  if (shopCart) closeShop();
+  editing = true;
+  maker.set({ name: myName, color: myColor, look: myLook });
+  setJoinMode("edit");
+  show("join", true);
+}
+function closeEditor() {
+  if (!editing) return;
+  editing = false;
+  show("join", false);
+  maker.setActive(false);
+  (document.activeElement as HTMLElement | null)?.blur?.();
+}
+
+function setMyAvatar() {
+  myAvatar?.dispose();
+  myAvatar = new Avatar(myName, myColor, myLook);
+  scene.add(myAvatar.group);
+}
+
+async function connect() {
+  if (client) return client;
+  const c = new ConvexClient(CONVEX_URL!);
+  await (client = c, syncTime()).catch((e) => {
+    client = null;
+    c.close();
+    throw e;
+  });
+  return c;
+}
+
+/** Saves the form as the device's profile, then enters the park (or applies the edit). */
+async function submitMaker() {
+  if (joinBtn.disabled) return;
   if (!CONVEX_URL) {
     $("joinStatus").textContent = "Thiếu cấu hình máy chủ (VITE_CONVEX_URL).";
     return;
   }
-  btn.disabled = true;
+  const ch = maker.value();
+  if (!ch.name) ch.name = editing ? myName : "Khách " + Math.floor(100 + Math.random() * 900);
+  joinBtn.disabled = true;
   $("joinStatus").textContent = "";
-  btn.textContent = "Đang kết nối…";
+  joinBtn.textContent = editing ? "Đang lưu…" : "Đang kết nối…";
   try {
-    client = client ?? new ConvexClient(CONVEX_URL);
-    await syncTime();
-    me.pos.set((Math.random() - 0.5) * 6, 0, 84 + Math.random() * 4);
-    myId = await client.mutation(api.players.join, { name: myName, color: myColor, x: me.pos.x, z: me.pos.z });
-    wallet = await client.mutation(api.shop.open, { token: walletToken });
-    client.onUpdate(api.shop.wallet, { token: walletToken }, (w) => {
-      if (!w) return;
-      wallet = w;
-      renderWallet();
-      if (shopCart && !buyPending) renderShop();
-    });
-    client.onUpdate(api.players.list, {}, (list) => syncRemotes(list as PlayerDoc[]));
-    client.onUpdate(api.chat.recent, {}, (msgs) => {
-      const now = serverNow();
-      for (const m of msgs) {
-        if (seenMsgs.has(m._id)) continue;
-        seenMsgs.add(m._id);
-        addChatLine(m.name, m.color, m.text);
-        if (!firstChat && now - m._creationTime < 20000) {
-          if (m.playerId === myId) myAvatar?.say(m.text, performance.now());
-          else remotes.get(m.playerId)?.avatar.say(m.text, performance.now());
-          if (m.playerId !== myId) sfx.chime();
-        }
-      }
-      firstChat = false;
-    });
-    client.onUpdate(api.scores.top, { game: "darts" }, (s) => {
-      topScores = s;
-      renderBoard();
-    });
-    myAvatar = new Avatar(myName, myColor, myId);
-    scene.add(myAvatar.group);
-    joined = true;
-    camYaw = Math.PI;
-    camPitch = -0.2;
-    show("join", false);
-    show("ui", true);
-    addChatLine(null, "", `Chào mừng ${myName} đến Công Viên Giải Trí! {party} Hãy thử tàu lượn siêu tốc ở phía Tây Bắc nhé.`, true);
-    addChatLine(null, "", `{coin} Bạn có ${xu() ?? XU_QUOTA} Xu để mua đồ ăn, nước uống ở các xe đẩy – tự nạp lại sau 6 giờ.`, true);
-    toast(isTouch ? "Kéo bên trái để đi, bên phải để nhìn" : "WASD để đi · kéo chuột để nhìn · V đổi góc nhìn", 4000);
-    setInterval(() => syncTime().catch(() => {}), 60000);
+    const c = await connect();
+    const saved = await c.mutation(api.players.saveProfile, { token: walletToken, ...ch, id: editing && myId ? myId : undefined });
+    localStorage.setItem("cvgt-name", saved.name);
+    localStorage.setItem("cvgt-color", saved.color);
+    if (editing) {
+      const renamed = saved.name !== myName;
+      myName = saved.name;
+      myColor = saved.color;
+      myLook = saved.look as Look;
+      setMyAvatar();
+      closeEditor();
+      toast(renamed ? `{star} Đã đổi tên thành ${myName}` : "{star} Đã lưu nhân vật", 2000);
+      return;
+    }
+    if (!(await enter())) throw new Error("profile missing after save");
   } catch (e) {
     console.error(e);
-    $("joinStatus").textContent = "Không kết nối được máy chủ. Thử lại nhé!";
-    btn.disabled = false;
-    setRich(btn, "Vào công viên {play}");
+    $("joinStatus").textContent = editing ? "Không lưu được. Thử lại nhé!" : "Không kết nối được máy chủ. Thử lại nhé!";
+    joinBtn.disabled = false;
+    setRich(joinBtn, editing ? "Lưu {star}" : "Vào công viên {play}");
   }
+}
+
+/** Returning device: go straight back in where the player left, no menu. */
+async function resume() {
+  setJoinMode("resume");
+  $("resumeMsg").textContent = "Đang vào lại công viên…";
+  show("retryBtn", false);
+  try {
+    await connect();
+    if (await enter()) return;
+    // no saved profile yet (played before profiles existed): pick a character once
+    maker.set({ name: localStorage.getItem("cvgt-name") || "", color: localStorage.getItem("cvgt-color") || undefined });
+    setJoinMode("first");
+  } catch (e) {
+    console.error(e);
+    $("resumeMsg").textContent = "Không kết nối được máy chủ.";
+    show("retryBtn", true);
+  }
+}
+
+let sessionStarted = false;
+function startSession(c: ConvexClient) {
+  if (sessionStarted) return;
+  sessionStarted = true;
+  c.onUpdate(api.shop.wallet, { token: walletToken }, (w) => {
+    if (!w) return;
+    wallet = w;
+    renderWallet();
+    if (shopCart && !buyPending) renderShop();
+  });
+  c.onUpdate(api.players.list, {}, (list) => syncRemotes(list as PlayerDoc[]));
+  c.onUpdate(api.chat.recent, {}, (msgs) => {
+    const now = serverNow();
+    for (const m of msgs) {
+      if (seenMsgs.has(m._id)) continue;
+      seenMsgs.add(m._id);
+      addChatLine(m.name, m.color, m.text);
+      if (!firstChat && now - m._creationTime < 20000) {
+        if (m.playerId === myId) myAvatar?.say(m.text, performance.now());
+        else remotes.get(m.playerId)?.avatar.say(m.text, performance.now());
+        if (m.playerId !== myId) sfx.chime();
+      }
+    }
+    firstChat = false;
+  });
+  c.onUpdate(api.scores.top, { game: "darts" }, (s) => {
+    topScores = s;
+    renderBoard();
+  });
+  setInterval(() => syncTime().catch(() => {}), 60000);
+}
+
+/** Joins as the saved profile. Returns false if this device has none yet. */
+async function enter() {
+  const c = await connect();
+  const r = await c.mutation(api.players.join, { token: walletToken, fallback: spawnPoint() });
+  if (!r) return false;
+  wallet = await c.mutation(api.shop.open, { token: walletToken });
+  myId = r.id;
+  myName = r.name;
+  myColor = r.color;
+  myLook = r.look as Look;
+  me.pos.set(r.x, 0, r.z);
+  collide(me.pos);
+  me.yaw = r.ry;
+  camYaw = r.ry;
+  camPitch = -0.2;
+  setMyAvatar();
+  joined = true;
+  startSession(c);
+  show("join", false);
+  maker.setActive(false);
+  show("ui", true);
+  if (r.resumed) addChatLine(null, "", `Chào mừng ${myName} quay lại! {party} Bạn đang ở chỗ lần trước rời công viên.`, true);
+  else addChatLine(null, "", `Chào mừng ${myName} đến Công Viên Giải Trí! {party} Hãy thử tàu lượn siêu tốc ở phía Tây Bắc nhé.`, true);
+  addChatLine(null, "", `{coin} Bạn có ${xu() ?? XU_QUOTA} Xu để mua đồ ăn, nước uống ở các xe đẩy – tự nạp lại sau 6 giờ.`, true);
+  addChatLine(null, "", "{pencil} Bấm nút bút chì ở góc trên để đổi tên hoặc nhân vật.", true);
+  toast(isTouch ? "Kéo bên trái để đi, bên phải để nhìn" : "WASD để đi · kéo chuột để nhìn · V đổi góc nhìn", 4000);
+  return true;
+}
+
+if (returning && CONVEX_URL) resume();
+else {
+  maker.set({ name: localStorage.getItem("cvgt-name") || "", color: localStorage.getItem("cvgt-color") || undefined });
+  setJoinMode("first");
 }
 window.addEventListener("pagehide", () => {
   if (client && myId) client.mutation(api.players.leave, { id: myId }).catch(() => {});
@@ -991,7 +1102,9 @@ function frame() {
     }
     camPitch = camMode === "fp" ? Math.max(-1.45, Math.min(1.45, camPitch)) : Math.max(-1.25, Math.min(0.45, camPitch));
 
-    const mv = shopCart ? { x: 0, y: 0, run: false } : input.move();
+    const frozen = !!shopCart || editing;
+    if (editing) input.jumpQueued = false;
+    const mv = frozen ? { x: 0, y: 0, run: false } : input.move();
     const speed = mv.run ? 8.5 : 4.6;
     const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
     const rx = -Math.cos(camYaw), rz = Math.sin(camYaw);

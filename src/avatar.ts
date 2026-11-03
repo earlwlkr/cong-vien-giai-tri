@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { makeLabel, disposeLabel, shade, std } from "./util";
+import { HAIR_COLORS, Look, SHOE_COLORS, SKIN_TONES, cleanLook } from "../convex/looks";
 
 export type Pose = "idle" | "walk" | "run" | "jump" | "sit" | "cheer" | "horse" | "throw" | "wave" | "serve";
 
@@ -13,17 +14,6 @@ export const HIP_HEIGHT = HIP * SCALE;
 export const EYE_OFFSET = (NECK + HEAD_CY - 0.03) * SCALE; // from hip to eyes
 export const EYE_HEIGHT = HIP_HEIGHT + EYE_OFFSET;
 
-const skinTones = ["#ffcfae", "#f8bf96", "#efb07c", "#dd9a62", "#c07f4a", "#93603a"];
-const hairColors = ["#3b2a20", "#5a3a22", "#1f1b24", "#a0663a", "#e8b44a", "#d96c4f"];
-
-type HairStyle = "tuft" | "buns" | "catHood" | "bow" | "bearHood";
-const HAIR_STYLES: HairStyle[] = ["tuft", "buns", "catHood", "bow", "bearHood"];
-
-function hash(s: string) {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  return h >>> 0;
-}
 
 export class Avatar {
   group = new THREE.Group();
@@ -49,9 +39,11 @@ export class Avatar {
   private chew = 0;
   private puffs: { s: THREE.Sprite; t: number }[] = [];
 
-  constructor(public name: string, public color: string, seed = name) {
-    const h = hash(seed + color);
-    const style = HAIR_STYLES[h % HAIR_STYLES.length];
+  readonly look: Look;
+
+  constructor(public name: string, public color: string, look: Look) {
+    this.look = cleanLook(look);
+    const { style } = this.look;
     // a touch of self-glow keeps the toy-like colours bright on the shadowed side
     const soft = (c: THREE.ColorRepresentation, extra: Partial<THREE.MeshStandardMaterialParameters> = {}) => {
       const m = std(c, { roughness: 0.85, emissive: c, emissiveIntensity: 0.14, ...extra });
@@ -68,10 +60,9 @@ export class Avatar {
     const shirt = soft(color);
     const tummy = soft(shade(color, 22));
     const pants = soft(shade(color, -32));
-    const skin = soft(skinTones[(h >>> 3) % skinTones.length], { roughness: 0.7, emissiveIntensity: 0.2 });
-    const shoe = soft(["#ffffff", "#2d2d36", "#ff7eb6", "#ffd166"][(h >>> 6) % 4]);
-    const hairCol = (h >>> 9) % 4 === 0 ? shade(color, -15) : hairColors[(h >>> 9) % hairColors.length];
-    const hair = soft(hairCol);
+    const skin = soft(SKIN_TONES[this.look.skin], { roughness: 0.7, emissiveIntensity: 0.2 });
+    const shoe = soft(SHOE_COLORS[this.look.shoes]);
+    const hair = soft(HAIR_COLORS[this.look.hair]);
     const ink = flat("#2a1f2d");
     const white = flat("#ffffff");
     const blush = flat("#ff8fa3", 0.55);
@@ -193,7 +184,7 @@ export class Avatar {
       } else if (style === "buns") {
         for (const side of [1, -1]) this.head.add(mesh(sphere, hair, side * 0.3, top - 0.06, -0.08, 0.13));
       } else {
-        const bowMat = soft((h >>> 12) % 2 ? "#ff7eb6" : shade(color, 18));
+        const bowMat = soft(this.look.hair === 6 ? shade(color, 18) : "#ff7eb6");
         const bow = new THREE.Group();
         bow.position.set(0.24, top - 0.06, 0.12);
         bow.rotation.z = -0.5;

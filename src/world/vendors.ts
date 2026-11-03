@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { CARTS, Cart, CartKind, ITEMS, cartFront } from "../../convex/catalog";
+import { lookFromSeed } from "../../convex/looks";
 import { Avatar, Pose } from "../avatar";
 import { canvasTexture, Collider, makeSign, rng, shade, std } from "../util";
 import { drawSprite, isSprite } from "../sprites";
@@ -476,7 +477,7 @@ export class Vendors {
       const group = buildCart(c, tick);
       group.position.set(c.x, 0, c.z);
       group.rotation.y = c.rot;
-      const seller = new Avatar(c.seller.name, c.seller.color, "seller-" + c.id);
+      const seller = new Avatar(c.seller.name, c.seller.color, lookFromSeed("seller-" + c.id + c.seller.color));
       seller.addHat(c.seller.hat, shade(c.seller.color, -10));
       seller.group.position.set(SELLER.x, 0, SELLER.z);
       group.add(seller.group);

@@ -88,7 +88,7 @@ body.touch #exitBtn { bottom: calc(110px + env(safe-area-inset-bottom)); }
 
 /* ---- on a ride: minimal HUD ---- */
 body.riding #useBtn { bottom: calc(16px + env(safe-area-inset-bottom)); }
-body.riding #where, body.riding #minimap, body.riding #soundBtn, body.riding #jumpBtn,
+body.riding #where, body.riding #minimap, body.riding #soundBtn, body.riding #editBtn, body.riding #jumpBtn,
 body.riding #stick, body.riding #board, body.riding #prompt { display: none !important; }
 body.riding #exitBtn { left: calc(10px + env(safe-area-inset-left)); top: calc(50px + env(safe-area-inset-top)); bottom: auto; transform: none; padding: 8px 14px; font-size: 14px; border-radius: 999px; background: rgba(20,30,60,.55); backdrop-filter: blur(6px); }
 body.riding #exitBtn .spr { width: 16px; height: 16px; }
@@ -130,4 +130,51 @@ body.touch #useBtn { right: calc(100px + env(safe-area-inset-right)); bottom: ca
 .shopFoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 18px 14px; font-size: 13px; color: #556; }
 .shopFoot b { color: #b86e00; font-size: 15px; }
 body.touch .shopItem kbd { display: none; }
-@media (max-height: 500px) { #shopItems { max-height: 38vh; } .shopCard { width: min(520px, 100%); } }
+body.shopping #chat, body.shopping #mobileBtns, body.shopping #board, body.shopping #stick { display: none !important; }
+@media (max-height: 500px) {
+  #shop { place-items: center end; padding: 8px calc(10px + env(safe-area-inset-right)) 8px 8px; }
+  .shopCard { width: min(380px, 52vw); max-height: calc(100vh - 16px); display: flex; flex-direction: column; }
+  .shopHead { padding: 6px 10px 6px 14px; font-size: 17px; }
+  #shopSeller { padding: 6px 14px 2px; font-size: 12px; }
+  #shopItems { max-height: none; flex: 1; min-height: 0; padding: 4px 8px; gap: 4px; }
+  .shopItem { padding: 5px 8px; grid-template-columns: 30px 1fr auto; }
+  .shopItem .spr { width: 28px; height: 28px; }
+  .shopItem .nm { font-size: 13px; }
+  .shopItem .ds { display: none; }
+  .shopItem button { padding: 7px 10px; min-width: 64px; }
+  .shopFoot { padding: 6px 14px 8px; font-size: 11px; }
+}
+
+/* ---- character maker (first join / edit) and resume screen ---- */
+#join.mode-edit { background: rgba(20,30,60,.35); backdrop-filter: none; }
+#join.mode-edit .intro, #join.mode-edit .help, #join.mode-resume #maker, #join.mode-resume .help { display: none; }
+#join:not(.mode-edit) .editTitle, #join:not(.mode-edit) #cancelBtn, #join:not(.mode-resume) #resume { display: none; }
+.editTitle { margin: 0 0 4px; font-size: 20px; text-align: center; color: #233; }
+.editTitle .spr { width: 24px; height: 24px; vertical-align: -0.25em; }
+.lookRow { display: flex; gap: 12px; align-items: stretch; margin-top: 4px; }
+#lookPreview { flex: 0 0 128px; width: 128px; height: 168px; border-radius: 16px; background: radial-gradient(circle at 50% 35%, #fff 0%, #dff1ff 55%, #bfe3ff 100%); cursor: grab; touch-action: none; align-self: center; }
+.lookOpts { flex: 1; min-width: 0; }
+.lookOpts label:first-child { margin-top: 2px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 7px; }
+.swatches .sw { width: 26px; height: 26px; padding: 0; border-width: 2px; }
+.lookOpts .swatches { gap: 5px; }
+#colors.swatches .sw { width: 30px; height: 30px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 5px 10px; border-radius: 999px; border: 2px solid #dde3ee; background: #fff; color: #345; font-size: 13px; font-weight: 700; }
+.chip.sel { border-color: #223; background: #223; color: #fff; }
+.actions { display: flex; gap: 8px; align-items: stretch; margin-top: 16px; }
+.actions .primary { margin-top: 0; flex: 1; }
+.ghost { padding: 10px 12px; border-radius: 14px; border: 2px solid #dde3ee; background: #fff; color: #345; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.ghost .spr { width: 18px; height: 18px; vertical-align: -0.25em; }
+#resume { text-align: center; padding: 10px 0 4px; }
+#resumeMsg { font-weight: 700; color: #456; }
+#retryBtn { margin-top: 12px; }
+@media (max-width: 380px) {
+  #lookPreview { flex-basis: 104px; width: 104px; height: 140px; }
+  #randomBtn { font-size: 0; padding: 10px; }
+  #randomBtn .spr { margin: 0; }
+}
+@media (max-height: 500px) {
+  .card { padding: 14px 16px 10px; }
+  #join.mode-first .sub { display: none; }
+}

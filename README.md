@@ -9,6 +9,8 @@ Dạo quanh công viên, trò chuyện với mọi người và chơi các trò 
 - 🎠 **Vòng ngựa gỗ** – có nhạc
 - 🎯 **Ném phi tiêu** – 45 giây, bảng xếp hạng chung
 
+Lần đầu vào, bạn đặt tên và tự chọn nhân vật (kiểu tóc/mũ, màu da, tóc, áo, giày). Tên, nhân vật và chỗ bạn rời công viên được lưu theo thiết bị: lần sau mở game là vào thẳng đúng chỗ cũ, không cần chọn lại. Bấm nút bút chì ở góc trên để đổi tên hoặc nhân vật.
+
 Có góc nhìn thứ nhất / thứ ba, chat với bong bóng trên đầu nhân vật, minimap, và điều khiển cảm ứng cho điện thoại.
 
 ## Điều khiển
@@ -23,7 +25,7 @@ Có góc nhìn thứ nhất / thứ ba, chat với bong bóng trên đầu nhân
 ## Công nghệ
 
 - [three.js](https://threejs.org) + [Vite](https://vite.dev) + TypeScript
-- [Convex](https://convex.dev) – vị trí người chơi, chat, bảng xếp hạng, đồng bộ thời gian
+- [Convex](https://convex.dev) – hồ sơ người chơi (tên, nhân vật, vị trí cuối), vị trí người chơi, chat, bảng xếp hạng, đồng bộ thời gian
 - [Vercel](https://vercel.com) – hosting
 
 ## Chạy local
