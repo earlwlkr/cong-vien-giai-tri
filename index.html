@@ -25,7 +25,7 @@
           <label for="nameInput">Tên của bạn</label>
           <input id="nameInput" maxlength="18" placeholder="Nhập tên..." autocomplete="off" />
           <div class="lookRow">
-            <div id="previewBox"><canvas id="lookPreview" title="Kéo để xoay"></canvas><img id="pixPreview" class="pix" alt="" title="Hình pixel của bạn (hiện trong chat, danh sách người chơi và bản đồ)" /></div>
+            <canvas id="lookPreview" title="Kéo để xoay"></canvas>
             <div class="lookOpts">
               <label>Kiểu tóc</label>
               <div id="optStyle" class="chips"></div>
@@ -81,8 +81,7 @@
 
     <div id="ui" class="hidden">
       <div id="topLeft">
-        <button class="pill" id="online" title="Ai đang chơi?"><i data-s="people"></i> 1</button>
-        <div id="playerList" class="hidden"></div>
+        <div class="pill" id="online"><i data-s="people"></i> 1</div>
         <div class="pill" id="where"><i data-s="gate"></i> Cổng chính</div>
         <div class="pill" id="wallet" title="Xu để mua đồ ăn, nước uống. Tự nạp lại sau 6 giờ."><i data-s="coin"></i> <b id="xuVal">…</b> Xu <span id="xuRefill"></span></div>
         <div id="rideHud" class="hidden"></div>

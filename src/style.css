@@ -154,9 +154,7 @@ body.shopping #chat, body.shopping #mobileBtns, body.shopping #board, body.shopp
 .editTitle { margin: 0 0 4px; font-size: 20px; text-align: center; color: #233; }
 .editTitle .spr { width: 24px; height: 24px; vertical-align: -0.25em; }
 .lookRow { display: flex; gap: 12px; align-items: stretch; margin-top: 4px; }
-#previewBox { position: relative; flex: 0 0 auto; align-self: center; }
-#pixPreview { position: absolute; right: 4px; bottom: 4px; width: 32px; height: 40px; image-rendering: pixelated; pointer-events: none; background: rgba(255,255,255,.7); border-radius: 8px; padding: 2px; box-sizing: content-box; }
-#lookPreview { display: block; flex: 0 0 128px; width: 128px; height: 168px; border-radius: 16px; background: radial-gradient(circle at 50% 35%, #fff 0%, #dff1ff 55%, #bfe3ff 100%); cursor: grab; touch-action: none; align-self: center; }
+#lookPreview { flex: 0 0 128px; width: 128px; height: 168px; border-radius: 16px; background: radial-gradient(circle at 50% 35%, #fff 0%, #dff1ff 55%, #bfe3ff 100%); cursor: grab; touch-action: none; align-self: center; }
 .lookOpts { flex: 1; min-width: 0; }
 .lookOpts label:first-child { margin-top: 2px; }
 .swatches { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -182,16 +180,3 @@ body.shopping #chat, body.shopping #mobileBtns, body.shopping #board, body.shopp
   .card { padding: 14px 16px 10px; }
   #join.mode-first .sub { display: none; }
 }
-
-/* pixel sprites baked from the 3D avatars (src/pixel.ts) */
-.pix { image-rendering: pixelated; image-rendering: crisp-edges; pointer-events: none; }
-button.pill { border: 0; color: #fff; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; display: block; }
-button.pill:hover { background: rgba(20,30,60,.7); }
-.msg .pix { width: 22px; height: 22px; vertical-align: -6px; margin: -3px 4px -3px -3px; }
-#playerList { pointer-events: auto; background: rgba(20,30,60,.72); backdrop-filter: blur(6px); border-radius: 16px; padding: 10px; margin-bottom: 6px; width: fit-content; max-width: min(340px, calc(100vw - 30px)); max-height: 46vh; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 6px; }
-#playerList .pl { width: 72px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 2px 4px; border-radius: 12px; background: rgba(255,255,255,.08); }
-#playerList .pl.me { background: rgba(255,209,102,.22); }
-#playerList .pl .pix { width: 64px; height: 80px; }
-#playerList .pl span { font-size: 12px; font-weight: 700; max-width: 68px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
-#playerList .pl small { font-size: 10px; opacity: .8; margin-top: -2px; }
-body.riding #playerList { display: none; }

@@ -16,7 +16,6 @@ import { Darts } from "./world/darts";
 import { buildPark, BOUNDS, PATHS, PLAZA_R } from "./world/park";
 import { drawSprite, hydrateSprites, isSprite, setRich, spriteEl, spriteURL } from "./sprites";
 import { Vendors } from "./world/vendors";
-import { PixelSprite, pixelImg, pixelSprite } from "./pixel";
 import { makeItem } from "./items";
 import { CARTS, Cart, XU_QUOTA, XU_REFILL_MS, getItem, isDrink } from "../convex/catalog";
 
@@ -204,7 +203,6 @@ interface Remote {
   name: string;
   color: string;
   lookKey: string;
-  sprite: PixelSprite | null;
 }
 const remotes = new Map<string, Remote>();
 let latestPlayers: PlayerDoc[] = [];
@@ -227,7 +225,7 @@ function syncRemotes(list: PlayerDoc[]) {
     if (!r) {
       const avatar = new Avatar(p.name, p.color, look);
       scene.add(avatar.group);
-      r = { avatar, pos: new THREE.Vector3(p.x, p.y, p.z), target: new THREE.Vector3(), yaw: p.ry, targetYaw: p.ry, anim: p.anim, ride: null, held: p.held, name: p.name, color: p.color, lookKey: lookKey(look), sprite: pixelSprite(p.color, look) };
+      r = { avatar, pos: new THREE.Vector3(p.x, p.y, p.z), target: new THREE.Vector3(), yaw: p.ry, targetYaw: p.ry, anim: p.anim, ride: null, held: p.held, name: p.name, color: p.color, lookKey: lookKey(look) };
       remotes.set(p._id, r);
     }
     const prev = r.held, held = p.held ?? null;
@@ -256,63 +254,7 @@ function syncRemotes(list: PlayerDoc[]) {
     }
   }
   setRich($("online"), `{people} ${seen.size + (joined ? 1 : 0)} đang chơi`);
-  fillChatPortraits();
-  if (playerListOpen) renderPlayerList();
 }
-
-// ---------------- pixel portraits ----------------
-/** Current look of a player (null if they're not in the park any more). */
-function spriteFor(id: string): PixelSprite | null | undefined {
-  if (id === myId) return pixelSprite(myColor, myLook);
-  const r = remotes.get(id);
-  if (r) return r.sprite;
-  const p = latestPlayers.find((q) => q._id === id);
-  return p ? pixelSprite(p.color, p.look ?? lookFromSeed(p._id + p.color)) : undefined;
-}
-/** Chat lines whose sender wasn't known yet (chat history can arrive before the player list). */
-let pendingPortraits: { id: string; slot: HTMLElement }[] = [];
-function fillChatPortraits() {
-  pendingPortraits = pendingPortraits.filter(({ id, slot }) => {
-    if (!slot.isConnected) return false;
-    const s = spriteFor(id);
-    if (s) slot.replaceWith(pixelImg(s, "bust", 1));
-    return s === undefined;
-  });
-}
-
-let playerListOpen = false;
-const RIDE_NAMES: Record<string, string> = { coaster: "tàu lượn", wheel: "vòng quay", carousel: "ngựa gỗ" };
-function renderPlayerList() {
-  const el = $("playerList");
-  el.innerHTML = "";
-  const now = serverNow();
-  const entries: { id: string; name: string; me: boolean; note: string }[] = [{ id: myId ?? "", name: myName, me: true, note: "bạn" }];
-  for (const p of latestPlayers) {
-    if (p._id === myId || now - p.lastSeen > 20000) continue;
-    entries.push({ id: p._id, name: p.name, me: false, note: p.ride ? "đang chơi " + (RIDE_NAMES[p.ride.kind] ?? p.ride.kind) : "" });
-  }
-  for (const e of entries) {
-    const card = document.createElement("div");
-    card.className = "pl" + (e.me ? " me" : "");
-    const s = e.me ? pixelSprite(myColor, myLook) : spriteFor(e.id);
-    if (s) card.appendChild(pixelImg(s, "full", 2));
-    const nm = document.createElement("span");
-    nm.textContent = e.name;
-    card.appendChild(nm);
-    if (e.note) {
-      const sm = document.createElement("small");
-      sm.textContent = e.note;
-      card.appendChild(sm);
-    }
-    el.appendChild(card);
-  }
-}
-function togglePlayerList(on = !playerListOpen) {
-  playerListOpen = on;
-  show("playerList", on);
-  if (on) renderPlayerList();
-}
-$("online").addEventListener("click", () => togglePlayerList());
 
 async function syncTime() {
   if (!client) return;
@@ -362,18 +304,9 @@ const chatForm = $("chatForm") as HTMLFormElement;
 const chatInput = $("chatInput") as HTMLInputElement;
 const seenMsgs = new Set<string>();
 let firstChat = true;
-function addChatLine(name: string | null, color: string, text: string, rich = false, playerId?: string) {
+function addChatLine(name: string | null, color: string, text: string, rich = false) {
   const d = document.createElement("div");
   d.className = "msg" + (name ? "" : " sys");
-  if (playerId) {
-    const s = spriteFor(playerId);
-    if (s) d.appendChild(pixelImg(s, "bust", 1));
-    else if (s === undefined) {
-      const slot = document.createElement("span");
-      d.appendChild(slot);
-      pendingPortraits.push({ id: playerId, slot });
-    }
-  }
   if (name) {
     const b = document.createElement("b");
     b.style.color = color;
@@ -887,7 +820,6 @@ function setMyAvatar() {
   myAvatar?.dispose();
   myAvatar = new Avatar(myName, myColor, myLook);
   scene.add(myAvatar.group);
-  if (playerListOpen) renderPlayerList();
 }
 
 async function connect() {
@@ -971,7 +903,7 @@ function startSession(c: ConvexClient) {
     for (const m of msgs) {
       if (seenMsgs.has(m._id)) continue;
       seenMsgs.add(m._id);
-      addChatLine(m.name, m.color, m.text, false, m.playerId);
+      addChatLine(m.name, m.color, m.text);
       if (!firstChat && now - m._creationTime < 20000) {
         if (m.playerId === myId) myAvatar?.say(m.text, performance.now());
         else remotes.get(m.playerId)?.avatar.say(m.text, performance.now());
@@ -1063,17 +995,12 @@ mmBg.height = mm.height;
   for (const c of CARTS) if (isSprite(c.sprite)) drawSprite(g, c.sprite, ...toMap(c.x, c.z), 10);
   for (const [e, x, z] of [["coaster", -92, -92], ["wheel", 70, -70], ["horse", 58, 18], ["target", -52, 16], ["fountain", 0, 0], ["gate", 0, 96]] as const) drawSprite(g, e, ...toMap(x, z), 16);
 }
-const MM_HEAD = 14;
 function drawMinimap() {
   mmCtx.drawImage(mmBg, 0, 0);
   const now = serverNow();
   for (const r of remotes.values()) {
     const p = r.avatar.group.position;
     const [x, y] = toMap(p.x, p.z);
-    if (r.sprite) {
-      mmCtx.drawImage(r.sprite.bust, Math.round(x - MM_HEAD / 2), Math.round(y - MM_HEAD / 2), MM_HEAD, MM_HEAD);
-      continue;
-    }
     mmCtx.fillStyle = r.color;
     mmCtx.strokeStyle = "#fff";
     mmCtx.lineWidth = 1;
