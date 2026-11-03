@@ -99,6 +99,37 @@ export class Sfx {
   clack() { this.burst(1800, 4, 0.05, 0.35); }
   pop() { this.burst(900, 0.8, 0.12, 0.9); this.burst(3000, 1, 0.06, 0.4, "highpass"); }
   whoosh() { this.burst(1200, 0.6, 0.25, 0.25); }
+  /** Coins dropping into the seller's tin. */
+  coin() {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.tone(1976, 0.12, 0.12, "square", t);
+    this.tone(2637, 0.25, 0.1, "square", t + 0.07);
+    this.tone(2349, 0.2, 0.06, "triangle", t + 0.16);
+  }
+  munch() {
+    if (!this.enabled || !this.ctx) return;
+    [0, 0.13, 0.27].forEach((d) => setTimeout(() => this.burst(500 + Math.random() * 400, 1.2, 0.07, 0.5), d * 1000));
+  }
+  slurp() {
+    if (!this.enabled || !this.ctx) return;
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const f = ctx.createBiquadFilter();
+    f.type = "bandpass";
+    f.Q.value = 6;
+    const t = ctx.currentTime;
+    f.frequency.setValueAtTime(500, t);
+    f.frequency.exponentialRampToValueAtTime(1600, t + 0.45);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.5, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(t, Math.random());
+    src.stop(t + 0.55);
+  }
   ding() {
     if (!this.enabled) return;
     this.tone(880, 0.25, 0.2, "triangle");

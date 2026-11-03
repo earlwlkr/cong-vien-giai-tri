@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { Collider, makeSign, std } from "../util";
+import { Collider, std } from "../util";
 
 const N_GOND = 12;
 const PERIOD = 80; // seconds per revolution
@@ -175,14 +175,5 @@ export class FerrisWheel {
     plat.receiveShadow = true;
     this.group.add(plat);
     this.colliders.push({ x: this.group.position.x, z: this.group.position.z, r: 2.4 });
-    const sign = makeSign("VÒNG QUAY MẶT TRỜI", 9, 1.8, "#8338ec", "#fff", "🎡 Ngắm toàn cảnh công viên");
-    sign.position.set(0, 4.2, 7.6);
-    const sp1 = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.2, 8), white);
-    sp1.position.set(-4.2, 2.1, 7.55);
-    const sp2 = sp1.clone();
-    sp2.position.x = 4.2;
-    this.group.add(sign, sp1, sp2);
-    this.colliders.push({ x: this.group.position.x - 4.2, z: this.group.position.z + 7.55, r: 0.3 });
-    this.colliders.push({ x: this.group.position.x + 4.2, z: this.group.position.z + 7.55, r: 0.3 });
   }
 }

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { drawSprite, isSprite } from "./sprites";
 
 export const isTouch =
   typeof window !== "undefined" &&
@@ -138,16 +139,16 @@ export function makeSign(text: string, w: number, h: number, bg = "#ff4e7a", fg 
     g.textBaseline = "middle";
     let fs = H * (sub ? 0.36 : 0.48);
     g.font = `900 ${fs}px system-ui, sans-serif`;
-    while (g.measureText(text).width > W * 0.88 && fs > 10) {
+    while (richWidth(g, text, fs) > W * 0.88 && fs > 10) {
       fs *= 0.92;
       g.font = `900 ${fs}px system-ui, sans-serif`;
     }
     g.shadowColor = "rgba(0,0,0,.35)";
     g.shadowBlur = H * 0.04;
-    g.fillText(text, W / 2, sub ? H * 0.4 : H / 2);
+    fillRich(g, text, W / 2, sub ? H * 0.4 : H / 2, fs, W * 0.88);
     if (sub) {
       g.font = `700 ${H * 0.17}px system-ui, sans-serif`;
-      g.fillText(sub, W / 2, H * 0.73, W * 0.9);
+      fillRich(g, sub, W / 2, H * 0.73, H * 0.17, W * 0.9);
     }
   });
   const m = new THREE.Mesh(
@@ -155,6 +156,40 @@ export function makeSign(text: string, w: number, h: number, bg = "#ff4e7a", fg 
     new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }),
   );
   return m;
+}
+
+/** Splits "{sprite} text" into drawable pieces. */
+function richParts(text: string) {
+  return text.split(/(\{[a-z]+\})/).filter(Boolean).map((t) => {
+    const n = t.startsWith("{") ? t.slice(1, -1) : "";
+    return isSprite(n) ? { sprite: n } : { text: t };
+  });
+}
+const SPRITE_EM = 1.15;
+function richWidth(g: CanvasRenderingContext2D, text: string, fs: number) {
+  return richParts(text).reduce((w, p) => w + ("sprite" in p ? fs * SPRITE_EM : g.measureText(p.text!).width), 0);
+}
+/** Centred single-line text with inline pixel sprites; current g.font must match fs. */
+function fillRich(g: CanvasRenderingContext2D, text: string, cx: number, cy: number, fs: number, maxW: number) {
+  const w = richWidth(g, text, fs);
+  const k = w > maxW ? maxW / w : 1;
+  g.save();
+  g.translate(cx, cy);
+  g.scale(k, 1);
+  g.textAlign = "left";
+  g.textBaseline = "middle";
+  let x = -w / 2;
+  for (const p of richParts(text)) {
+    if ("sprite" in p) {
+      const sz = fs * SPRITE_EM;
+      drawSprite(g, p.sprite!, x + sz / 2, 0, sz);
+      x += sz;
+    } else {
+      g.fillText(p.text!, x, 0);
+      x += g.measureText(p.text!).width;
+    }
+  }
+  g.restore();
 }
 
 export function shade(hex: string, amt: number) {

@@ -23,6 +23,7 @@ export const join = mutation({
       ry: 0,
       anim: "idle",
       ride: null,
+      held: null,
       lastSeen: Date.now(),
     });
   },
@@ -76,6 +77,7 @@ export const list = query({
       ry: p.ry,
       anim: p.anim,
       ride: p.ride ?? null,
+      held: p.held ?? null,
       lastSeen: p.lastSeen,
     }));
   },

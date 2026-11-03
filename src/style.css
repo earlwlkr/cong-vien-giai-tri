@@ -7,7 +7,13 @@ input { font: inherit; user-select: text; -webkit-user-select: text; }
 
 .overlay { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 30% 20%, rgba(255,140,200,.55), transparent 60%), radial-gradient(circle at 80% 80%, rgba(255,210,90,.5), transparent 55%), rgba(30,40,90,.55); backdrop-filter: blur(4px); z-index: 50; padding: 16px; overflow-y: auto; }
 .card { width: min(440px, 100%); background: rgba(255,255,255,.96); color: #233; border-radius: 22px; padding: 22px 22px 16px; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
-.logo { font-size: 40px; text-align: center; letter-spacing: 6px; }
+.logo { display: flex; justify-content: center; gap: 10px; }
+.logo .spr { width: 48px; height: 48px; }
+/* pixel sprites (16x16 source): fixed sizes, nearest-neighbour scaling */
+.spr { display: inline-block; width: 16px; height: 16px; vertical-align: -0.2em; image-rendering: pixelated; pointer-events: none; }
+#toast .spr, #prompt .spr, #useBtn .spr, #rideHud .spr, #dartsHud .spr, .primary .spr { width: 24px; height: 24px; vertical-align: -0.3em; }
+.round .spr { width: 24px; height: 24px; vertical-align: middle; }
+.round.big .spr { width: 32px; height: 32px; }
 .card h1 { margin: 4px 0 2px; text-align: center; font-size: 30px; background: linear-gradient(90deg,#ff4e7a,#ff9f1c,#2ec4b6); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .sub { text-align: center; margin: 0 0 14px; color: #567; font-size: 14px; }
 .card label { display: block; font-weight: 700; font-size: 13px; margin: 10px 0 6px; color: #456; }
@@ -79,3 +85,49 @@ body.touch #exitBtn { bottom: calc(110px + env(safe-area-inset-bottom)); }
   .round.big { width: 56px; height: 56px; }
   #board { top: calc(70px + env(safe-area-inset-top)); }
 }
+
+/* ---- on a ride: minimal HUD ---- */
+body.riding #useBtn { bottom: calc(16px + env(safe-area-inset-bottom)); }
+body.riding #where, body.riding #minimap, body.riding #soundBtn, body.riding #jumpBtn,
+body.riding #stick, body.riding #board, body.riding #prompt { display: none !important; }
+body.riding #exitBtn { left: calc(10px + env(safe-area-inset-left)); top: calc(50px + env(safe-area-inset-top)); bottom: auto; transform: none; padding: 8px 14px; font-size: 14px; border-radius: 999px; background: rgba(20,30,60,.55); backdrop-filter: blur(6px); }
+body.riding #exitBtn .spr { width: 16px; height: 16px; }
+body.riding #rideHud { padding: 6px 14px; font-size: 14px; border-radius: 999px; background: rgba(20,30,60,.5); }
+body.riding #rideHud .spr { width: 18px; height: 18px; vertical-align: -0.25em; }
+body.riding #speedo { width: 84px; padding: 6px; border-radius: 14px; background: rgba(20,30,60,.5); bottom: calc(16px + env(safe-area-inset-bottom)); }
+body.riding #speedVal { font-size: 28px; }
+body.riding #gVal { font-size: 13px; margin-top: 2px; }
+body.touch.riding #speedo { bottom: calc(80px + env(safe-area-inset-bottom)); }
+
+/* ---- Xu wallet, shop, eating ---- */
+#wallet { background: rgba(120,70,0,.6); }
+#wallet b { color: #ffd166; font-size: 15px; }
+#wallet.bump { animation: bump .5s; }
+@keyframes bump { 30% { transform: scale(1.15); background: rgba(230,57,70,.8); } }
+#xuRefill { font-size: 12px; opacity: .85; font-weight: 600; }
+#useBtn { position: absolute; right: calc(16px + env(safe-area-inset-right)); bottom: calc(24px + env(safe-area-inset-bottom)); border: 0; border-radius: 16px; padding: 12px 18px; font-weight: 800; font-size: 16px; color: #fff; background: linear-gradient(90deg,#06d6a0,#2ec4b6); box-shadow: 0 6px 18px rgba(0,0,0,.3); }
+#useBtn:active { transform: scale(.94); }
+body.touch #useBtn { right: calc(100px + env(safe-area-inset-right)); bottom: calc(30px + env(safe-area-inset-bottom)); padding: 10px 14px; font-size: 14px; }
+#shop { position: absolute; inset: 0; display: grid; place-items: end center; padding: 12px 12px calc(16px + env(safe-area-inset-bottom)); pointer-events: none; }
+.shopCard { pointer-events: auto; width: min(430px, 100%); background: rgba(255,250,240,.97); color: #233; border-radius: 22px; overflow: hidden; box-shadow: 0 16px 50px rgba(0,0,0,.35); animation: rise .25s ease-out; }
+@keyframes rise { from { transform: translateY(30px); opacity: 0; } }
+.shopHead { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px 18px; font-size: 20px; font-weight: 900; color: #fff; }
+.shopHead .spr { width: 28px; height: 28px; vertical-align: -0.3em; }
+#shopClose { width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(255,255,255,.3); color: #fff; font-size: 16px; font-weight: 900; }
+#shopSeller { padding: 10px 18px 4px; font-size: 14px; color: #556; }
+#shopSeller b { color: #233; }
+#shopItems { padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; }
+.shopItem { display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 14px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.shopItem .spr { width: 36px; height: 36px; }
+.shopItem .nm { font-weight: 800; font-size: 15px; }
+.shopItem .ds { font-size: 12px; color: #678; }
+.shopItem kbd { margin-right: 4px; }
+.shopItem button { border: 0; border-radius: 12px; padding: 9px 12px; min-width: 82px; font-weight: 900; font-size: 14px; color: #fff; background: linear-gradient(90deg,#ff4e7a,#ff9f1c); white-space: nowrap; }
+.shopItem button .spr { width: 16px; height: 16px; }
+.shopItem button:disabled { background: #b9c0cc; }
+#shopWallet { white-space: nowrap; }
+#shopNote { text-align: right; }
+.shopFoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 18px 14px; font-size: 13px; color: #556; }
+.shopFoot b { color: #b86e00; font-size: 15px; }
+body.touch .shopItem kbd { display: none; }
+@media (max-height: 500px) { #shopItems { max-height: 38vh; } .shopCard { width: min(520px, 100%); } }

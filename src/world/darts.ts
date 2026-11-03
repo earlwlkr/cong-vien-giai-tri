@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { BoxCollider, makeSign, std } from "../util";
+import { BoxCollider, std } from "../util";
 
 const COLS = 6, ROWS = 4;
 export const DART_TIME = 45;
@@ -89,9 +89,7 @@ export class Darts {
     awning.rotation.x = 0.25;
     const roof = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.2, 5.4), std("#ffffff"));
     roof.position.set(0, 4.65, -0.9);
-    const sign = makeSign("NÉM PHI TIÊU", 6, 1.3, "#3a86ff", "#fff", "🎯 Bắn bóng bay · Lên bảng vàng");
-    sign.position.set(0, 5.6, 2.2);
-    this.group.add(back, cork, left, right, counter, counterTop, awning, roof, sign);
+    this.group.add(back, cork, left, right, counter, counterTop, awning, roof);
     // prizes: teddy bears on side shelves
     const bearColors = ["#c08552", "#f4acb7", "#9ad1d4", "#ffd166"];
     for (let i = 0; i < 6; i++) {

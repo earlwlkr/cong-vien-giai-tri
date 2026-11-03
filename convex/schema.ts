@@ -8,6 +8,8 @@ export const rideValidator = v.object({
   start: v.number(),
 });
 
+export const heldValidator = v.object({ item: v.string(), left: v.number() });
+
 export default defineSchema({
   players: defineTable({
     name: v.string(),
@@ -18,6 +20,8 @@ export default defineSchema({
     ry: v.number(),
     anim: v.string(),
     ride: v.optional(v.union(rideValidator, v.null())),
+    /** Food/drink/balloon in hand (server-authoritative: set by shop.buy, consumed by shop.use). */
+    held: v.optional(v.union(heldValidator, v.null())),
     lastSeen: v.number(),
   })
     .index("by_lastSeen", ["lastSeen"])
@@ -28,6 +32,14 @@ export default defineSchema({
     color: v.string(),
     text: v.string(),
   }),
+  /** Xu balance per device (random token kept in localStorage); survives player rows. */
+  wallets: defineTable({
+    token: v.string(),
+    balance: v.number(),
+    /** When the current spending cycle started; refills XU_REFILL_MS later. */
+    cycleStart: v.number(),
+    lastBuy: v.number(),
+  }).index("by_token", ["token"]),
   scores: defineTable({
     game: v.string(),
     name: v.string(),

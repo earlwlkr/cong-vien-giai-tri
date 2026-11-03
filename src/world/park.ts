@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { CARTS } from "../../convex/catalog";
 import { BoxCollider, Collider, canvasTexture, makeSign, rng, std } from "../util";
 
 export const BOUNDS = { minX: -128, maxX: 128, minZ: -118, maxZ: 99 };
@@ -183,7 +184,7 @@ export function buildPark(scene: THREE.Scene, blocked: (x: number, z: number) =>
   arch.position.y = 7.5;
   gate.add(arch);
   for (const side of [1, -1]) {
-    const s = makeSign("CÔNG VIÊN GIẢI TRÍ", 12, 2.2, "#3a0ca3", "#ffd166", "✨ Chào mừng bạn! ✨");
+    const s = makeSign("CÔNG VIÊN GIẢI TRÍ", 12, 2.2, "#3a0ca3", "#ffd166", "{star} Chào mừng bạn! {star}");
     s.position.set(0, 9.3 + 0.2, side * 0.5);
     if (side < 0) s.rotation.y = Math.PI;
     gate.add(s);
@@ -246,47 +247,44 @@ export function buildPark(scene: THREE.Scene, blocked: (x: number, z: number) =>
     scene.add(h);
   }
 
-  // ---- kiosks ----
-  const kiosks: { x: number; z: number; rot: number; name: string; col: string }[] = [
-    { x: -10, z: 40, rot: Math.PI / 2, name: "🍦 KEM TƯƠI", col: "#ff9fb2" },
-    { x: 10, z: 40, rot: -Math.PI / 2, name: "🍿 BẮP RANG", col: "#ffd166" },
-    { x: -10, z: 64, rot: Math.PI / 2, name: "🥤 NƯỚC MÍA", col: "#06d6a0" },
-    { x: 10, z: 64, rot: -Math.PI / 2, name: "🥖 BÁNH MÌ", col: "#ff9f1c" },
-    { x: 26, z: -6, rot: -Math.PI / 2 - 0.3, name: "🍭 KẸO BÔNG", col: "#c77dff" },
-    { x: -27, z: -5, rot: Math.PI / 2 + 0.3, name: "🎈 BÓNG BAY", col: "#4cc9f0" },
+  // ---- ride billboards: an arch over the start of each path, facing the plaza ----
+  const pathSigns = [
+    { path: 1, title: "TÀU LƯỢN SIÊU TỐC", bg: "#e63946", sub: "{coaster} Cao 30m · Vòng xoắn 360°" },
+    { path: 2, title: "VÒNG QUAY MẶT TRỜI", bg: "#8338ec", sub: "{wheel} Ngắm toàn cảnh công viên" },
+    { path: 3, title: "VÒNG NGỰA GỖ", bg: "#ff9f1c", sub: "{horse} Nhạc vui · Phi ngựa vòng quanh" },
+    { path: 4, title: "NÉM PHI TIÊU", bg: "#3a86ff", sub: "{target} Bắn bóng bay · Lên bảng vàng" },
   ];
-  for (const k of kiosks) {
-    const g = new THREE.Group();
-    g.position.set(k.x, 0, k.z);
-    g.rotation.y = k.rot;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.2, 2.2), std(k.col));
-    body.position.y = 0.6;
-    const top = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.1, 2.4), std("#ffffff"));
-    top.position.y = 1.25;
-    const stripes = canvasTexture(256, 32, (c) => {
-      for (let i = 0; i < 8; i++) { c.fillStyle = i % 2 ? "#ffffff" : k.col; c.fillRect(i * 32, 0, 32, 32); }
-    });
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(4, 0.15, 3), new THREE.MeshStandardMaterial({ map: stripes }));
-    roof.position.set(0, 2.9, 0.2);
-    roof.rotation.x = 0.15;
-    const pm = std("#ffffff");
-    for (const x of [-1.6, 1.6]) for (const z of [-1, 1]) {
-      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.7, 6), pm);
-      p.position.set(x, 2.1, z);
-      g.add(p);
+  const archPostGeo = new THREE.CylinderGeometry(0.14, 0.16, 5.6, 10);
+  const archPostMat = std("#ffffff");
+  for (const ps of pathSigns) {
+    const p = PATHS[ps.path];
+    const [ax, az] = p.pts[0], [bx, bz] = p.pts[1];
+    const len = Math.hypot(bx - ax, bz - az);
+    const ux = (bx - ax) / len, uz = (bz - az) / len;
+    const cx = ax + ux * 4.5, cz = az + uz * 4.5;
+    const half = p.w / 2 + 0.7;
+    const arch = new THREE.Group();
+    arch.position.set(cx, 0, cz);
+    arch.rotation.y = Math.atan2(-ux, -uz); // local +z (sign front) faces back toward the plaza
+    for (const side of [-1, 1]) {
+      const post = new THREE.Mesh(archPostGeo, archPostMat);
+      post.position.set(side * half, 2.8, 0);
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 8), std("#ffd166"));
+      ball.position.set(side * half, 5.75, 0);
+      arch.add(post, ball);
+      // local x axis in world space is (-uz, ux)
+      colliders.push({ x: cx - uz * side * half, z: cz + ux * side * half, r: 0.35 });
     }
-    const sign = makeSign(k.name, 3.2, 0.7, k.col, "#fff");
-    sign.position.set(0, 3.45, 1.4);
-    g.add(body, top, roof, sign);
-    // goodies on counter
-    for (let i = 0; i < 4; i++) {
-      const it = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), std(["#ff4e7a", "#ffd166", "#ffffff", "#8338ec"][i]));
-      it.position.set(-1.1 + i * 0.7, 1.45, 0.4);
-      g.add(it);
+    // same board on both faces so it reads from the plaza and on the way back
+    for (const face of [1, -1]) {
+      const s = makeSign(ps.title, half * 2 + 0.6, 1.7, ps.bg, "#fff", ps.sub);
+      (s.material as THREE.MeshBasicMaterial).side = THREE.FrontSide;
+      s.position.set(0, 4.6, face * 0.04);
+      if (face < 0) s.rotation.y = Math.PI;
+      arch.add(s);
     }
-    g.traverse((o) => ((o as THREE.Mesh).isMesh && (o.castShadow = true)));
-    scene.add(g);
-    colliders.push({ x: k.x, z: k.z, r: 2.1 });
+    arch.traverse((o) => ((o as THREE.Mesh).isMesh && (o.castShadow = true)));
+    scene.add(arch);
   }
 
   // ---- lamps & bunting along the avenue + paths ----
@@ -294,7 +292,10 @@ export function buildPark(scene: THREE.Scene, blocked: (x: number, z: number) =>
   for (let z = 24; z <= 92; z += 12) lampPos.push([-5.2, z], [5.2, z]);
   for (let a = 0; a < 12; a++) {
     const ang = (a / 12) * Math.PI * 2 + 0.26;
-    lampPos.push([Math.cos(ang) * (PLAZA_R + 0.8), Math.sin(ang) * (PLAZA_R + 0.8)]);
+    const lx = Math.cos(ang) * (PLAZA_R + 0.8), lz = Math.sin(ang) * (PLAZA_R + 0.8);
+    // keep path mouths clear so the ride arches are visible from the plaza
+    if (PATHS.some((p) => p.pts.slice(1).some((q, i) => distToSeg(lx, lz, p.pts[i], q) < p.w / 2 + 0.6))) continue;
+    lampPos.push([lx, lz]);
   }
   for (const p of PATHS.slice(1)) {
     for (let i = 0; i < p.pts.length - 1; i++) {
@@ -392,7 +393,7 @@ export function buildPark(scene: THREE.Scene, blocked: (x: number, z: number) =>
     if (nearPath(x, z, 3)) continue;
     if (blocked(x, z)) continue;
     if (Math.abs(x) < 16 && z > 30) continue;
-    if (kiosks.some((k) => Math.hypot(k.x - x, k.z - z) < 5)) continue;
+    if (CARTS.some((k) => Math.hypot(k.x - x, k.z - z) < 5)) continue;
     if (treePos.some((p) => (p[0] - x) ** 2 + (p[1] - z) ** 2 < 16)) continue;
     treePos.push([x, z, 0.8 + tr() * 0.6]);
   }

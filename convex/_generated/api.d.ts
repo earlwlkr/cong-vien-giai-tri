@@ -8,10 +8,12 @@
  * @module
  */
 
+import type * as catalog from "../catalog.js";
 import type * as chat from "../chat.js";
 import type * as crons from "../crons.js";
 import type * as players from "../players.js";
 import type * as scores from "../scores.js";
+import type * as shop from "../shop.js";
 import type * as time from "../time.js";
 
 import type {
@@ -21,10 +23,12 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  catalog: typeof catalog;
   chat: typeof chat;
   crons: typeof crons;
   players: typeof players;
   scores: typeof scores;
+  shop: typeof shop;
   time: typeof time;
 }>;
 

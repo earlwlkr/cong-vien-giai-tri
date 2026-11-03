@@ -7,22 +7,22 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="description" content="Công Viên Giải Trí – công viên 3D nhiều người chơi: tàu lượn siêu tốc, vòng quay, ngựa gỗ, ném phi tiêu và chat cùng bạn bè." />
-    <title>Công Viên Giải Trí 🎢</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎢</text></svg>" />
+    <title>Công Viên Giải Trí</title>
+    <link rel="icon" type="image/png" href="data:," />
   </head>
   <body>
     <canvas id="game"></canvas>
 
     <div id="join" class="overlay">
       <div class="card">
-        <div class="logo">🎢🎡🎠</div>
+        <div class="logo"><i data-s="coaster"></i><i data-s="wheel"></i><i data-s="horse"></i></div>
         <h1>Công Viên Giải Trí</h1>
-        <p class="sub">Dạo chơi, trò chuyện và thử tàu lượn siêu tốc cùng mọi người!</p>
+        <p class="sub">Dạo chơi, trò chuyện, ăn kem uống nước mía và thử tàu lượn siêu tốc cùng mọi người!</p>
         <label>Tên của bạn</label>
         <input id="nameInput" maxlength="18" placeholder="Nhập tên..." autocomplete="off" />
         <label>Màu áo</label>
         <div id="colors"></div>
-        <button id="joinBtn" class="primary">Vào công viên ▶</button>
+        <button id="joinBtn" class="primary">Vào công viên <i data-s="play"></i></button>
         <div id="joinStatus" class="status"></div>
         <details class="help">
           <summary>Hướng dẫn điều khiển</summary>
@@ -34,7 +34,8 @@
                 <li><kbd>Shift</kbd>: chạy · <kbd>Space</kbd>: nhảy</li>
                 <li>Kéo chuột: xoay góc nhìn (lăn chuột: zoom)</li>
                 <li><kbd>V</kbd>: đổi góc nhìn thứ nhất / thứ ba</li>
-                <li><kbd>E</kbd>: chơi trò chơi · <kbd>Q</kbd>: rời trò chơi</li>
+                <li><kbd>E</kbd>: chơi trò chơi / mua đồ ăn · <kbd>Q</kbd>: rời trò chơi</li>
+                <li><kbd>F</kbd>: ăn / uống món đang cầm</li>
                 <li><kbd>Enter</kbd>: chat</li>
               </ul>
             </div>
@@ -43,7 +44,8 @@
               <ul>
                 <li>Chạm & kéo nửa trái: cần điều khiển</li>
                 <li>Kéo nửa phải: xoay góc nhìn</li>
-                <li>Nút 👁 đổi góc nhìn, 💬 chat</li>
+                <li>Nút <i data-s="eye"></i> đổi góc nhìn, <i data-s="chat"></i> chat</li>
+                <li>Mỗi người có <i data-s="coin"></i> 300 Xu, tự nạp lại sau 6 giờ</li>
               </ul>
             </div>
           </div>
@@ -53,14 +55,15 @@
 
     <div id="ui" class="hidden">
       <div id="topLeft">
-        <div class="pill" id="online">👥 1</div>
-        <div class="pill" id="where">📍 Cổng chính</div>
+        <div class="pill" id="online"><i data-s="people"></i> 1</div>
+        <div class="pill" id="where"><i data-s="gate"></i> Cổng chính</div>
+        <div class="pill" id="wallet" title="Xu để mua đồ ăn, nước uống. Tự nạp lại sau 6 giờ."><i data-s="coin"></i> <b id="xuVal">…</b> Xu <span id="xuRefill"></span></div>
       </div>
       <div id="topRight">
         <canvas id="minimap" width="150" height="150"></canvas>
         <div class="btnRow">
-          <button class="round" id="camBtn" title="Đổi góc nhìn (V)">👁</button>
-          <button class="round" id="soundBtn" title="Âm thanh">🔊</button>
+          <button class="round" id="camBtn" title="Đổi góc nhìn (V)"><i data-s="eye"></i></button>
+          <button class="round" id="soundBtn" title="Âm thanh"><i data-s="sound"></i></button>
         </div>
       </div>
 
@@ -68,7 +71,17 @@
       <div id="speedo" class="hidden"><div id="speedVal">0</div><div class="unit">km/h</div><div id="gVal">1.0 G</div></div>
 
       <div id="prompt" class="hidden"></div>
-      <button id="exitBtn" class="hidden">⬅ Rời trò chơi (Q)</button>
+      <button id="useBtn" class="hidden"></button>
+
+      <div id="shop" class="hidden">
+        <div class="shopCard">
+          <div class="shopHead"><span id="shopTitle"></span><button id="shopClose" title="Đóng (Esc)">✕</button></div>
+          <div id="shopSeller"></div>
+          <div id="shopItems"></div>
+          <div class="shopFoot"><span id="shopWallet"></span><span id="shopNote"></span></div>
+        </div>
+      </div>
+      <button id="exitBtn" class="hidden"><i data-s="back"></i> Rời trò chơi (Q)</button>
 
       <div id="chat">
         <div id="chatLog"></div>
@@ -76,13 +89,13 @@
       </div>
 
       <div id="mobileBtns">
-        <button class="round big" id="jumpBtn">⤒</button>
-        <button class="round" id="chatBtn">💬</button>
+        <button class="round big" id="jumpBtn"><i data-s="jump"></i></button>
+        <button class="round" id="chatBtn"><i data-s="chat"></i></button>
       </div>
       <div id="stick" class="hidden"><div id="knob"></div></div>
 
       <div id="dartsHud" class="hidden">
-        <div class="dRow"><span>🎯 <b id="dScore">0</b></span><span>⏱ <b id="dTime">45</b>s</span></div>
+        <div class="dRow"><span><i data-s="target"></i> <b id="dScore">0</b></span><span><i data-s="timer"></i> <b id="dTime">45</b>s</span></div>
         <div class="dHint">Chạm / bấm vào bóng bay để ném phi tiêu! Bóng vàng = 30 điểm</div>
       </div>
       <div id="board" class="hidden"></div>

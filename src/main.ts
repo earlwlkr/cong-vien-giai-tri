@@ -12,8 +12,16 @@ import { FerrisWheel } from "./world/ferris";
 import { Carousel } from "./world/carousel";
 import { Darts } from "./world/darts";
 import { buildPark, BOUNDS, PATHS, PLAZA_R } from "./world/park";
+import { drawSprite, hydrateSprites, isSprite, setRich, spriteEl, spriteURL } from "./sprites";
+import { Vendors } from "./world/vendors";
+import { makeItem } from "./items";
+import { CARTS, Cart, XU_QUOTA, XU_REFILL_MS, getItem, isDrink } from "../convex/catalog";
+
+hydrateSprites();
+(document.querySelector("link[rel=icon]") as HTMLLinkElement | null)?.setAttribute("href", spriteURL("coaster"));
 
 type Ride = { kind: string; key: string; seat: number; start: number };
+type Held = { item: string; left: number };
 type PlayerDoc = {
   _id: Id<"players">;
   name: string;
@@ -24,6 +32,7 @@ type PlayerDoc = {
   ry: number;
   anim: string;
   ride: Ride | null;
+  held: Held | null;
   lastSeen: number;
 };
 type RideResult = { ok: boolean; done: boolean; speed?: number; g?: number; waiting?: number; lift?: boolean; height?: number; left?: number };
@@ -82,7 +91,9 @@ function blocked(x: number, z: number) {
   return false;
 }
 const park = buildPark(scene, blocked, isTouch);
-const colliders: Collider[] = [...park.colliders, ...coaster.colliders, ...wheel.colliders, ...carousel.colliders];
+const vendors = new Vendors();
+scene.add(vendors.group);
+const colliders: Collider[] = [...park.colliders, ...coaster.colliders, ...wheel.colliders, ...carousel.colliders, ...vendors.colliders];
 const boxes: BoxCollider[] = [...park.boxes, ...darts.boxes];
 
 type ZoneId = "coaster" | "wheel" | "carousel" | "darts";
@@ -93,13 +104,13 @@ const zones: { id: ZoneId; x: number; z: number; r: number }[] = [
   { id: "darts", x: darts.standPoint.x, z: darts.standPoint.z + 0.8, r: 3.4 },
 ];
 const places = [
-  { n: "🚪 Cổng chính", x: 0, z: 92, r: 14 },
-  { n: "⛲ Quảng trường", x: 0, z: 0, r: 24 },
-  { n: "🎢 Tàu lượn siêu tốc", x: -90, z: -95, r: 22 },
-  { n: "🎡 Vòng quay mặt trời", x: 70, z: -66, r: 24 },
-  { n: "🎠 Vòng ngựa gỗ", x: 58, z: 18, r: 17 },
-  { n: "🎯 Ném phi tiêu", x: -52, z: 19, r: 12 },
-  { n: "🍦 Phố ẩm thực", x: 0, z: 52, r: 22 },
+  { n: "{gate} Cổng chính", x: 0, z: 92, r: 14 },
+  { n: "{fountain} Quảng trường", x: 0, z: 0, r: 24 },
+  { n: "{coaster} Tàu lượn siêu tốc", x: -90, z: -95, r: 22 },
+  { n: "{wheel} Vòng quay mặt trời", x: 70, z: -66, r: 24 },
+  { n: "{horse} Vòng ngựa gỗ", x: 58, z: 18, r: 17 },
+  { n: "{target} Ném phi tiêu", x: -52, z: 19, r: 12 },
+  { n: "{icecream} Phố ẩm thực", x: 0, z: 52, r: 22 },
 ];
 
 // ---------------- state ----------------
@@ -126,6 +137,48 @@ let boardingPending = false;
 let mode: "walk" | "ride" | "darts" = "walk";
 let coasterQueued = false;
 let fov = 70;
+let myHeld: Held | null = null;
+let usePending = false;
+let nextUse = 0;
+let shopCart: Cart | null = null;
+let buyPending = false;
+const shopCamPos = new THREE.Vector3(), shopCamLook = new THREE.Vector3(), shopCamFrom = new THREE.Vector3();
+let shopCamActive = false;
+
+// ---------------- Xu wallet (per device; refills every 6h) ----------------
+const WALLET_KEY = "cvgt-wallet";
+let walletToken = localStorage.getItem(WALLET_KEY) || "";
+if (!/^[A-Za-z0-9-]{16,64}$/.test(walletToken)) {
+  walletToken = crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  localStorage.setItem(WALLET_KEY, walletToken);
+}
+let wallet: { balance: number; cycleStart: number } | null = null;
+let refillRequested = false;
+function xu(now = serverNow()) {
+  if (!wallet) return null;
+  return wallet.balance < XU_QUOTA && now - wallet.cycleStart >= XU_REFILL_MS ? XU_QUOTA : wallet.balance;
+}
+function refillLeft(now = serverNow()) {
+  if (!wallet || wallet.balance >= XU_QUOTA) return 0;
+  return Math.max(0, wallet.cycleStart + XU_REFILL_MS - now);
+}
+function fmtDur(ms: number) {
+  const m = Math.ceil(ms / 60000);
+  const h = Math.floor(m / 60);
+  return h ? `${h}g${String(m % 60).padStart(2, "0")}p` : `${m}p`;
+}
+function renderWallet() {
+  const now = serverNow();
+  const b = xu(now);
+  setText("xuVal", b === null ? "…" : String(b));
+  const left = refillLeft(now);
+  setText("xuRefill", left > 0 ? `· nạp lại sau ${fmtDur(left)}` : "");
+  // a refill came due while playing: let the server apply it so the balance is real
+  if (wallet && wallet.balance < XU_QUOTA && left === 0 && !refillRequested && client) {
+    refillRequested = true;
+    client.mutation(api.shop.open, { token: walletToken }).then((w) => (wallet = w)).catch(() => {}).finally(() => (refillRequested = false));
+  }
+}
 
 // ---------------- networking ----------------
 let client: ConvexClient | null = null;
@@ -139,6 +192,7 @@ interface Remote {
   targetYaw: number;
   anim: string;
   ride: Ride | null;
+  held: Held | null;
   name: string;
   color: string;
 }
@@ -162,9 +216,23 @@ function syncRemotes(list: PlayerDoc[]) {
     if (!r) {
       const avatar = new Avatar(p.name, p.color, p._id);
       scene.add(avatar.group);
-      r = { avatar, pos: new THREE.Vector3(p.x, p.y, p.z), target: new THREE.Vector3(), yaw: p.ry, targetYaw: p.ry, anim: p.anim, ride: null, name: p.name, color: p.color };
+      r = { avatar, pos: new THREE.Vector3(p.x, p.y, p.z), target: new THREE.Vector3(), yaw: p.ry, targetYaw: p.ry, anim: p.anim, ride: null, held: p.held, name: p.name, color: p.color };
       remotes.set(p._id, r);
     }
+    const prev = r.held, held = p.held ?? null;
+    if (held && prev?.item === held.item && held.left < prev.left) {
+      // they took a bite / sip
+      const it = getItem(held.item);
+      r.avatar.eat(performance.now());
+      if (it) r.avatar.puff(isDrink(it) ? "ực ực!" : "măm măm!", performance.now());
+    } else if (!held && prev && getItem(prev.item)?.model !== "balloon") {
+      r.avatar.eat(performance.now());
+    } else if (held && (prev?.item !== held.item || held.left > prev.left) && !p.ride) {
+      // fresh purchase: the nearby seller hands it over
+      const cartId = vendors.nearestCartId(p.x, p.z);
+      if (cartId) vendors.serve(cartId, performance.now(), false);
+    }
+    r.held = held;
     r.target.set(p.x, p.y, p.z);
     r.targetYaw = p.ry;
     r.anim = p.anim;
@@ -176,7 +244,7 @@ function syncRemotes(list: PlayerDoc[]) {
       remotes.delete(id);
     }
   }
-  $("online").textContent = `👥 ${seen.size + (joined ? 1 : 0)} đang chơi`;
+  setRich($("online"), `{people} ${seen.size + (joined ? 1 : 0)} đang chơi`);
 }
 
 async function syncTime() {
@@ -216,6 +284,7 @@ function netTick(pos: THREE.Vector3, ry: number, anim: string) {
 async function rejoin() {
   if (!client) return;
   if (myRide) leaveRideLocal();
+  myHeld = null;
   myId = await client.mutation(api.players.join, { name: myName, color: myColor, x: me.pos.x, z: me.pos.z });
 }
 
@@ -225,7 +294,7 @@ const chatForm = $("chatForm") as HTMLFormElement;
 const chatInput = $("chatInput") as HTMLInputElement;
 const seenMsgs = new Set<string>();
 let firstChat = true;
-function addChatLine(name: string | null, color: string, text: string) {
+function addChatLine(name: string | null, color: string, text: string, rich = false) {
   const d = document.createElement("div");
   d.className = "msg" + (name ? "" : " sys");
   if (name) {
@@ -234,7 +303,11 @@ function addChatLine(name: string | null, color: string, text: string) {
     b.textContent = name + ":";
     d.appendChild(b);
   }
-  d.appendChild(document.createTextNode(text));
+  if (rich) {
+    const span = document.createElement("span");
+    setRich(span, text);
+    d.appendChild(span);
+  } else d.appendChild(document.createTextNode(text));
   chatLog.appendChild(d);
   while (chatLog.children.length > 40) chatLog.firstElementChild!.remove();
   setTimeout(() => d.classList.add("old"), 12000);
@@ -266,7 +339,7 @@ $("chatBtn").addEventListener("click", () => (chatForm.classList.contains("hidde
 let toastTimer = 0;
 function toast(t: string, ms = 2600) {
   const el = $("toast");
-  el.textContent = t;
+  setRich(el, t);
   el.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => el.classList.remove("show"), ms);
@@ -276,7 +349,7 @@ const setText = (() => {
   return (id: string, text: string) => {
     if (cache.get(id) === text) return;
     cache.set(id, text);
-    $(id).textContent = text;
+    setRich($(id), text);
   };
 })();
 const show = (id: string, on: boolean) => $(id).classList.toggle("hidden", !on);
@@ -286,12 +359,12 @@ function toggleCam() {
   if (camMode === "fp") camPitch = Math.max(-0.6, Math.min(0.3, camPitch + 0.15));
   else camPitch = Math.min(camPitch, -0.15);
   rideLookPitch = camMode === "fp" ? -0.05 : -0.42;
-  toast(camMode === "fp" ? "👁 Góc nhìn thứ nhất" : "🎥 Góc nhìn thứ ba", 1200);
+  toast(camMode === "fp" ? "{eye} Góc nhìn thứ nhất" : "{camera} Góc nhìn thứ ba", 1200);
 }
 $("camBtn").addEventListener("click", toggleCam);
 $("soundBtn").addEventListener("click", () => {
   sfx.init();
-  $("soundBtn").textContent = sfx.toggle() ? "🔊" : "🔇";
+  setRich($("soundBtn"), sfx.toggle() ? "{sound}" : "{mute}");
 });
 $("jumpBtn").addEventListener("pointerdown", (e) => {
   e.preventDefault();
@@ -299,11 +372,29 @@ $("jumpBtn").addEventListener("pointerdown", (e) => {
 });
 $("exitBtn").addEventListener("click", () => leaveActivity());
 $("prompt").addEventListener("click", () => interact());
-$("exitBtn").textContent = isTouch ? "⬅ Rời trò chơi" : "⬅ Rời trò chơi (Q)";
+$("useBtn").addEventListener("click", () => useHeld());
+$("shopClose").addEventListener("click", () => closeShop());
+const EXIT_LABEL = isTouch ? "{back} Rời trò chơi" : "{back} Rời trò chơi (Q)";
+const EXIT_LABEL_RIDE = isTouch ? "{back} Xuống" : "{back} Xuống (Q)";
+setRich($("exitBtn"), EXIT_LABEL);
+/** On a ride: hide everything that isn't needed while seated (minimap, location, jump, etc). */
+function setRidingUI(on: boolean) {
+  document.body.classList.toggle("riding", on);
+  setRich($("exitBtn"), on ? EXIT_LABEL_RIDE : EXIT_LABEL);
+}
 
 input.onKey = (code) => {
   if (!joined) return;
-  if (code === "KeyV") toggleCam();
+  if (shopCart) {
+    if (code === "Escape" || code === "KeyQ" || code === "KeyE") closeShop();
+    else if (/^(Digit|Numpad)[1-9]$/.test(code)) {
+      const id = shopCart.items[+code.slice(-1) - 1];
+      if (id) buy(id);
+    }
+    return;
+  }
+  if (code === "KeyF") useHeld();
+  else if (code === "KeyV") toggleCam();
   else if (code === "KeyE") interact();
   else if (code === "KeyQ" || code === "Escape") leaveActivity();
   else if (code === "Enter") openChat();
@@ -350,7 +441,7 @@ async function doBoard(kind: string, key: string, maxSeats: number, start: numbe
   try {
     const r = await client.mutation(api.players.board, { id: myId, kind, key, maxSeats, start });
     if (!r) {
-      toast("Hết chỗ rồi, thử lại sau nhé! 😅");
+      toast("Hết chỗ rồi, thử lại sau nhé!");
       return;
     }
     myRide = r;
@@ -359,8 +450,10 @@ async function doBoard(kind: string, key: string, maxSeats: number, start: numbe
     rideLookPitch = camMode === "fp" ? -0.05 : -0.42;
     input.resetStick();
     sfx.chime();
+    setRidingUI(true);
     show("exitBtn", true);
     show("prompt", false);
+    show("board", false);
   } catch {
     toast("Lỗi kết nối, thử lại nhé");
   } finally {
@@ -372,7 +465,7 @@ function boardCoaster() {
   const st = coaster.boardable(serverNow());
   if (!st) {
     coasterQueued = !coasterQueued;
-    if (coasterQueued) toast("⏳ Đã xếp hàng! Tàu tới là lên ngay", 1800);
+    if (coasterQueued) toast("{hourglass} Đã xếp hàng! Tàu tới là lên ngay", 1800);
     return;
   }
   coasterQueued = false;
@@ -382,7 +475,14 @@ function boardCoaster() {
 function interact() {
   if (!joined || mode !== "walk") return;
   const z = currentZone();
-  if (!z) return;
+  if (!z) {
+    const cart = vendors.at(me.pos.x, me.pos.z);
+    if (cart) {
+      sfx.init();
+      openShop(cart);
+    }
+    return;
+  }
   sfx.init();
   const now = serverNow();
   if (z.id === "coaster") boardCoaster();
@@ -393,9 +493,173 @@ function interact() {
       if (p._id !== myId && p.ride?.kind === "carousel" && now - p.lastSeen < 20000) taken.add(+p.ride.key.split(":")[1]);
     }
     const i = carousel.nearestHorse(me.pos.x, me.pos.z, now, taken);
-    if (i < 0) toast("Hết ngựa rồi! 🐴");
+    if (i < 0) toast("{horse} Hết ngựa rồi!");
     else doBoard("carousel", `carousel:${i}`, 1, now);
   } else if (z.id === "darts") startDarts();
+}
+
+// ---------------- food carts ----------------
+const cartName = (c: Cart) => c.title.charAt(0) + c.title.slice(1).toLowerCase();
+const itemVerb = (id: string) => {
+  const it = getItem(id);
+  return !it ? "" : it.model === "balloon" ? "Thả bóng" : isDrink(it) ? "Uống" : "Ăn";
+};
+
+function openShop(c: Cart) {
+  shopCart = c;
+  input.resetStick();
+  closeChat();
+  const line = vendors.greet(c.id, performance.now());
+  const head = $("shop").querySelector(".shopHead") as HTMLElement;
+  head.style.background = `linear-gradient(90deg, ${c.color}, #ff9f1c)`;
+  setRich($("shopTitle"), `{${c.sprite}} ${cartName(c)}`);
+  const sel = $("shopSeller");
+  sel.replaceChildren();
+  const b = document.createElement("b");
+  b.textContent = c.seller.name + ": ";
+  sel.append(b, `“${line}”`);
+  renderShop();
+  show("shop", true);
+  show("prompt", false);
+  sfx.chime();
+}
+function closeShop() {
+  if (!shopCart) return;
+  shopCart = null;
+  shopCamActive = false;
+  show("shop", false);
+}
+function renderShop() {
+  const c = shopCart;
+  if (!c) return;
+  const bal = xu();
+  const list = $("shopItems");
+  list.replaceChildren();
+  c.items.forEach((id, i) => {
+    const it = getItem(id)!;
+    const row = document.createElement("div");
+    row.className = "shopItem";
+    const info = document.createElement("div");
+    const nm = document.createElement("div");
+    nm.className = "nm";
+    if (!isTouch) {
+      const k = document.createElement("kbd");
+      k.textContent = String(i + 1);
+      nm.append(k);
+    }
+    nm.append(it.name);
+    const ds = document.createElement("div");
+    ds.className = "ds";
+    ds.textContent = it.desc;
+    info.append(nm, ds);
+    const btn = document.createElement("button");
+    setRich(btn, `${it.price} {coin}`);
+    btn.disabled = buyPending || bal === null || bal < it.price;
+    btn.title = bal !== null && bal < it.price ? "Không đủ Xu" : `Mua ${it.name}`;
+    btn.onclick = () => buy(id);
+    row.append(isSprite(it.sprite) ? spriteEl(it.sprite) : document.createElement("span"), info, btn);
+    list.append(row);
+  });
+  const foot = $("shopWallet");
+  setRich(foot, `Bạn có {coin} `);
+  const bb = document.createElement("b");
+  bb.textContent = bal === null ? "…" : `${bal} Xu`;
+  foot.append(bb);
+  const left = refillLeft();
+  const holding = myHeld && getItem(myHeld.item);
+  $("shopNote").textContent = holding
+    ? `Đang cầm ${holding.name} – mua món mới sẽ thay`
+    : left > 0 ? `Nạp lại ${XU_QUOTA} Xu sau ${fmtDur(left)}` : `Mỗi 6 giờ nạp lại ${XU_QUOTA} Xu`;
+}
+
+async function buy(id: string) {
+  const c = shopCart;
+  const it = getItem(id);
+  if (!c || !it || !client || !myId || buyPending) return;
+  const bal = xu();
+  if (bal !== null && bal < it.price) {
+    toast(`{coin} Không đủ Xu! Còn ${bal} Xu, nạp lại sau ${fmtDur(refillLeft())}`, 3200);
+    return;
+  }
+  buyPending = true;
+  renderShop();
+  try {
+    // make sure the server has our position at the counter
+    await client.mutation(api.players.update, { id: myId, x: me.pos.x, y: me.pos.y, z: me.pos.z, ry: me.yaw, anim: me.pose });
+    const r = await client.mutation(api.shop.buy, { id: myId, token: walletToken, cart: c.id, item: id });
+    if (r.ok) {
+      wallet = { balance: r.balance, cycleStart: r.cycleStart };
+      if (myHeld && myAvatar?.heldObject?.userData.balloon) vendors.releaseBalloon(myAvatar.heldObject, scene);
+      myHeld = { item: id, left: it.bites };
+      sfx.coin();
+      vendors.serve(c.id, performance.now());
+      $("wallet").classList.remove("bump");
+      void $("wallet").offsetWidth;
+      $("wallet").classList.add("bump");
+      closeShop();
+      const how = isTouch ? `Bấm nút ${itemVerb(id)}` : `Bấm F để ${itemVerb(id).toLowerCase()}`;
+      toast(`{${it.sprite}} ${it.name} – ${it.price} Xu. ${it.model === "balloon" ? "Cầm chặt nha!" : how + "!"}`, 3000);
+    } else if (r.reason === "poor") {
+      if (r.balance !== undefined && wallet) wallet.balance = r.balance;
+      toast(`{coin} Không đủ Xu! Đợi nạp lại sau ${fmtDur(refillLeft())} nhé`, 3200);
+    } else if (r.reason === "far") toast("Lại gần quầy hơn chút nhé!");
+    else if (r.reason === "player") rejoin();
+  } catch {
+    toast("Lỗi kết nối, thử lại nhé");
+  } finally {
+    buyPending = false;
+    renderShop();
+  }
+}
+
+function useHeld() {
+  if (!joined || !myHeld || !client || !myId || usePending || mode === "darts" || shopCart) return;
+  const t = performance.now();
+  if (t < nextUse) return;
+  const it = getItem(myHeld.item);
+  if (!it) return;
+  sfx.init();
+  usePending = true;
+  const balloon = it.model === "balloon";
+  if (!balloon) {
+    nextUse = t + 900;
+    myAvatar?.eat(t);
+    if (isDrink(it)) sfx.slurp();
+    else sfx.munch();
+    myAvatar?.puff(isDrink(it) ? "ực ực!" : "măm măm!", t);
+  } else if (myAvatar?.heldObject) {
+    vendors.releaseBalloon(myAvatar.heldObject, scene);
+    sfx.whoosh();
+  }
+  const left = myHeld.left - 1;
+  myHeld = left > 0 ? { item: myHeld.item, left } : null;
+  if (!myHeld) {
+    setTimeout(() => {
+      if (balloon) toast("{balloon} Bóng bay lên trời rồi… tạm biệt!", 2600);
+      else toast(isDrink(it) ? `{drink} Đã khát quá! Hết ${it.name} rồi.` : `{party} Ngon quá! Hết sạch ${it.name}.`, 2600);
+      if (!balloon) sfx.ding();
+    }, balloon ? 400 : 900);
+  }
+  client
+    .mutation(api.shop.use, { id: myId })
+    .then((r) => {
+      // server is the source of truth (e.g. after a reconnect)
+      if (!r) myHeld = null;
+      else myHeld = r.left > 0 ? { item: r.item, left: r.left } : null;
+    })
+    .catch(() => {})
+    .finally(() => (usePending = false));
+}
+
+/** Rebuilds the hand-held model when the item or its remaining bites change. */
+function showHeld(a: Avatar, held: Held | null) {
+  const key = held ? `${held.item}:${held.left}` : "";
+  if (a.heldKey === key) return;
+  const prev = a.heldObject;
+  if (prev?.userData.balloon && (!held || !key.startsWith(a.heldKey.split(":")[0] + ":"))) vendors.releaseBalloon(prev, scene);
+  const obj = held ? makeItem(held.item, held.left) : null;
+  obj?.scale.multiplyScalar(1.35);
+  a.setHeld(obj, key);
 }
 
 function leaveRideLocal() {
@@ -412,6 +676,7 @@ function leaveRideLocal() {
   mode = "walk";
   camera.up.copy(UP);
   sfx.setWind(0);
+  setRidingUI(false);
   show("exitBtn", false);
   show("rideHud", false);
   show("speedo", false);
@@ -423,6 +688,7 @@ function leaveRide() {
 }
 
 function startDarts() {
+  closeShop();
   mode = "darts";
   me.pos.copy(darts.standPoint);
   me.yaw = Math.PI;
@@ -447,7 +713,7 @@ function endDarts(finished: boolean) {
   show("dartsHud", false);
   show("exitBtn", false);
   if (finished) {
-    toast(`⏱ Hết giờ! Bạn được ${score} điểm 🎯`, 3500);
+    toast(`{timer} Hết giờ! Bạn được ${score} điểm {target}`, 3500);
     sfx.ding();
     if (client && myId && score > 0) client.mutation(api.scores.submit, { id: myId, game: "darts", score }).catch(() => {});
   }
@@ -470,7 +736,7 @@ function renderBoard() {
   const b = $("board");
   b.innerHTML = "";
   const h = document.createElement("h3");
-  h.textContent = "🏆 Bảng vàng Ném Phi Tiêu";
+  setRich(h, "{trophy} Bảng vàng Ném Phi Tiêu");
   b.appendChild(h);
   const ol = document.createElement("ol");
   if (!topScores.length) {
@@ -530,6 +796,13 @@ async function join() {
     await syncTime();
     me.pos.set((Math.random() - 0.5) * 6, 0, 84 + Math.random() * 4);
     myId = await client.mutation(api.players.join, { name: myName, color: myColor, x: me.pos.x, z: me.pos.z });
+    wallet = await client.mutation(api.shop.open, { token: walletToken });
+    client.onUpdate(api.shop.wallet, { token: walletToken }, (w) => {
+      if (!w) return;
+      wallet = w;
+      renderWallet();
+      if (shopCart && !buyPending) renderShop();
+    });
     client.onUpdate(api.players.list, {}, (list) => syncRemotes(list as PlayerDoc[]));
     client.onUpdate(api.chat.recent, {}, (msgs) => {
       const now = serverNow();
@@ -556,14 +829,15 @@ async function join() {
     camPitch = -0.2;
     show("join", false);
     show("ui", true);
-    addChatLine(null, "", `Chào mừng ${myName} đến Công Viên Giải Trí! 🎉 Hãy thử tàu lượn siêu tốc ở phía Tây Bắc nhé.`);
-    toast(isTouch ? "Kéo bên trái để đi, bên phải để nhìn 👆" : "WASD để đi · kéo chuột để nhìn · V đổi góc nhìn", 4000);
+    addChatLine(null, "", `Chào mừng ${myName} đến Công Viên Giải Trí! {party} Hãy thử tàu lượn siêu tốc ở phía Tây Bắc nhé.`, true);
+    addChatLine(null, "", `{coin} Bạn có ${xu() ?? XU_QUOTA} Xu để mua đồ ăn, nước uống ở các xe đẩy – tự nạp lại sau 6 giờ.`, true);
+    toast(isTouch ? "Kéo bên trái để đi, bên phải để nhìn" : "WASD để đi · kéo chuột để nhìn · V đổi góc nhìn", 4000);
     setInterval(() => syncTime().catch(() => {}), 60000);
   } catch (e) {
     console.error(e);
     $("joinStatus").textContent = "Không kết nối được máy chủ. Thử lại nhé!";
     btn.disabled = false;
-    btn.textContent = "Vào công viên ▶";
+    setRich(btn, "Vào công viên {play}");
   }
 }
 window.addEventListener("pagehide", () => {
@@ -605,10 +879,8 @@ mmBg.height = mm.height;
   const [bx0, bz0] = toMap(BOUNDS.minX, BOUNDS.minZ);
   const [bx1, bz1] = toMap(BOUNDS.maxX, BOUNDS.maxZ);
   g.strokeRect(bx0, bz0, bx1 - bx0, bz1 - bz0);
-  g.font = "13px system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji'";
-  g.textAlign = "center";
-  g.textBaseline = "middle";
-  for (const [e, x, z] of [["🎢", -92, -92], ["🎡", 70, -70], ["🎠", 58, 18], ["🎯", -52, 16], ["⛲", 0, 0], ["🚪", 0, 96]] as const) g.fillText(e, ...toMap(x, z));
+  for (const c of CARTS) if (isSprite(c.sprite)) drawSprite(g, c.sprite, ...toMap(c.x, c.z), 10);
+  for (const [e, x, z] of [["coaster", -92, -92], ["wheel", 70, -70], ["horse", 58, 18], ["target", -52, 16], ["fountain", 0, 0], ["gate", 0, 96]] as const) drawSprite(g, e, ...toMap(x, z), 16);
 }
 function drawMinimap() {
   mmCtx.drawImage(mmBg, 0, 0);
@@ -719,7 +991,7 @@ function frame() {
     }
     camPitch = camMode === "fp" ? Math.max(-1.45, Math.min(1.45, camPitch)) : Math.max(-1.25, Math.min(0.45, camPitch));
 
-    const mv = input.move();
+    const mv = shopCart ? { x: 0, y: 0, run: false } : input.move();
     const speed = mv.run ? 8.5 : 4.6;
     const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
     const rx = -Math.cos(camYaw), rz = Math.sin(camYaw);
@@ -727,7 +999,7 @@ function frame() {
     const accel = me.onGround ? 12 : 3;
     me.vel.x = damp(me.vel.x, tx, accel, dt);
     me.vel.z = damp(me.vel.z, tz, accel, dt);
-    if (input.consumeJump() && me.onGround) {
+    if (input.consumeJump() && me.onGround && !shopCart) {
       me.vy = 6.8;
       me.onGround = false;
     }
@@ -742,14 +1014,25 @@ function frame() {
     }
     collide(me.pos);
     const hs = Math.hypot(me.vel.x, me.vel.z);
-    if (camMode === "fp") me.yaw = camYaw;
+    if (shopCart) { /* yaw handled by the shop camera */ }
+    else if (camMode === "fp") me.yaw = camYaw;
     else if (hs > 0.3) me.yaw = dampAngle(me.yaw, Math.atan2(me.vel.x, me.vel.z), 12, dt);
     me.pose = !me.onGround ? "jump" : hs > 6 ? "run" : hs > 0.4 ? "walk" : "idle";
 
     // camera
     lookDir.set(Math.sin(camYaw) * Math.cos(camPitch), Math.sin(camPitch), Math.cos(camYaw) * Math.cos(camPitch));
     camera.up.copy(UP);
-    if (camMode === "fp") {
+    if (shopCart && vendors.shopView(shopCart.id, shopCamPos, shopCamLook)) {
+      // face the counter and frame the seller
+      me.yaw = dampAngle(me.yaw, Math.atan2(shopCart.x - me.pos.x, shopCart.z - me.pos.z), 10, dt);
+      if (!shopCamActive) {
+        shopCamFrom.copy(camera.position);
+        shopCamActive = true;
+      }
+      shopCamFrom.lerp(shopCamPos, 1 - Math.exp(-dt * 5));
+      camera.position.copy(shopCamFrom);
+      camera.lookAt(shopCamLook);
+    } else if (camMode === "fp") {
       eye.copy(me.pos).y += EYE_HEIGHT;
       camera.position.copy(eye).addScaledVector(lookDir, 0.12);
       camera.lookAt(eye.addScaledVector(lookDir, 10));
@@ -765,8 +1048,9 @@ function frame() {
       myAvatar.group.position.copy(me.pos);
       myAvatar.group.rotation.set(0, me.yaw, 0);
       myAvatar.animate(me.pose, hs / 4.6, dt, performance.now());
-      myAvatar.setFirstPerson(camMode === "fp");
+      myAvatar.setFirstPerson(camMode === "fp" && !shopCart);
       myAvatar.group.visible = true;
+      if (shopCart) myAvatar.label.visible = false;
     }
     netTick(me.pos, me.yaw, me.pose);
 
@@ -779,15 +1063,18 @@ function frame() {
         const st = coaster.boardable(now);
         if (coasterQueued) {
           if (coaster.boardable(now, 3)) boardCoaster();
-          label = `⏳ Đang chờ tàu… ${Math.ceil(coaster.nextBoarding(now))}s (bấm để hủy)`;
-        } else if (st) label = `🎢 Lên tàu lượn! Tàu chạy sau ${Math.ceil(st.dwellLeft)}s${isTouch ? "" : " (E)"}`;
-        else label = `🎢 Xếp hàng chờ tàu – ${Math.ceil(coaster.nextBoarding(now))}s${isTouch ? "" : " (E)"}`;
-      } else if (z.id === "wheel") label = `🎡 Lên vòng quay mặt trời${isTouch ? "" : " (E)"}`;
-      else if (z.id === "carousel") label = `🎠 Cưỡi ngựa gỗ${isTouch ? "" : " (E)"}`;
-      else label = `🎯 Chơi ném phi tiêu${isTouch ? "" : " (E)"}`;
+          label = `{hourglass} Đang chờ tàu… ${Math.ceil(coaster.nextBoarding(now))}s (bấm để hủy)`;
+        } else if (st) label = `{coaster} Lên tàu lượn! Tàu chạy sau ${Math.ceil(st.dwellLeft)}s${isTouch ? "" : " (E)"}`;
+        else label = `{coaster} Xếp hàng chờ tàu – ${Math.ceil(coaster.nextBoarding(now))}s${isTouch ? "" : " (E)"}`;
+      } else if (z.id === "wheel") label = `{wheel} Lên vòng quay mặt trời${isTouch ? "" : " (E)"}`;
+      else if (z.id === "carousel") label = `{horse} Cưỡi ngựa gỗ${isTouch ? "" : " (E)"}`;
+      else label = `{target} Chơi ném phi tiêu${isTouch ? "" : " (E)"}`;
       setText("prompt", label);
     }
-    show("prompt", !!z);
+    const cart = !z && !shopCart ? vendors.at(me.pos.x, me.pos.z) : null;
+    if (cart) setText("prompt", `{${cart.sprite}} Mua ${cartName(cart)}${isTouch ? "" : " (E)"}`);
+    if (shopCart && !vendors.at(me.pos.x, me.pos.z)) closeShop();
+    show("prompt", (!!z || !!cart) && !shopCart);
     show("board", Math.hypot(me.pos.x - darts.origin.x, me.pos.z - darts.origin.z) < 16);
     sfx.setWind(0);
   } else if (mode === "ride" && myRide) {
@@ -802,8 +1089,8 @@ function frame() {
       const wasCoaster = myRide.kind === "coaster";
       const wasWheel = myRide.kind === "wheel";
       leaveRide();
-      if (wasCoaster) toast("🎉 Tuyệt vời! Bạn đã chinh phục tàu lượn siêu tốc!", 3500);
-      else if (wasWheel) toast("🎡 Hết một vòng – cảnh đẹp không?", 3000);
+      if (wasCoaster) toast("{party} Tuyệt vời! Bạn đã chinh phục tàu lượn siêu tốc!", 3500);
+      else if (wasWheel) toast("{wheel} Hết một vòng – cảnh đẹp không?", 3000);
       sfx.ding();
     } else {
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(tmpQuat);
@@ -839,13 +1126,13 @@ function frame() {
       if (myRide.kind === "coaster") {
         const waiting = res.waiting ?? 0;
         if (waiting > 0) {
-          setText("rideHud", `🎢 Tàu khởi hành sau ${Math.ceil(waiting)} giây… Thắt dây an toàn! 🔒`);
+          setText("rideHud", `{lock} Khởi hành sau ${Math.ceil(waiting)}s`);
           show("rideHud", true);
           show("speedo", false);
         } else {
-          if (lastWaiting > 0) { sfx.ding(); toast("🚀 Xuất phát!", 1500); }
+          if (lastWaiting > 0) { sfx.ding(); toast("{rocket} Xuất phát!", 1500); }
           show("rideHud", !!res.lift);
-          if (res.lift) setText("rideHud", "⛓️ Đang lên dốc 30m… chuẩn bị tinh thần!");
+          if (res.lift) setText("rideHud", "{chain} Lên dốc 30m…");
           show("speedo", true);
           setText("speedVal", String(Math.round(speed * 3.6)));
           setText("gVal", `${(res.g ?? 1).toFixed(1)} G`);
@@ -857,12 +1144,11 @@ function frame() {
           if (clackTimer <= 0) { sfx.clack(); clackTimer = 0.22; }
         }
       } else if (myRide.kind === "wheel") {
-        setText("rideHud", `🎡 Độ cao ${Math.max(0, res.height ?? 0).toFixed(0)} m · còn ${Math.ceil(res.left ?? 0)}s`);
+        setText("rideHud", `{wheel} ${Math.max(0, res.height ?? 0).toFixed(0)} m · ${Math.ceil(res.left ?? 0)}s`);
         show("rideHud", true);
         sfx.setWind(Math.max(0, ((res.height ?? 0) - 15) / 40));
       } else {
-        setText("rideHud", "🎠 Phi ngựa thôi! Nhấn “Rời trò chơi” để xuống");
-        show("rideHud", true);
+        show("rideHud", false);
       }
     }
   } else if (mode === "darts") {
@@ -892,6 +1178,20 @@ function frame() {
     camera.updateProjectionMatrix();
   }
 
+  // food carts, things in hand, wallet
+  vendors.update(t, dt, performance.now(), joined && mode !== "ride" ? me.pos : null);
+  if (myAvatar) showHeld(myAvatar, myHeld);
+  if (joined) {
+    const canUse = !!myHeld && mode !== "darts" && !shopCart;
+    if (canUse && myHeld) {
+      const it = getItem(myHeld.item);
+      const dots = it && it.bites > 1 ? " " + "●".repeat(myHeld.left) + "○".repeat(Math.max(0, it.bites - myHeld.left)) : "";
+      setText("useBtn", `{${it?.sprite ?? "party"}} ${itemVerb(myHeld.item)}${isTouch ? "" : " (F)"}${dots}`);
+    }
+    show("useBtn", canUse);
+    if (frameNo % 30 === 0) renderWallet();
+  }
+
   // remotes
   for (const r of remotes.values()) {
     let pose: Pose = (["idle", "walk", "run", "jump", "throw"].includes(r.anim) ? r.anim : "idle") as Pose;
@@ -915,6 +1215,7 @@ function frame() {
       r.avatar.group.rotation.set(0, r.yaw, 0);
       if (pose === "sit" || pose === "horse" || pose === "cheer") pose = "idle";
     }
+    showHeld(r.avatar, r.held);
     r.avatar.animate(pose, 1, dt, performance.now());
   }
   if (frameNo % 120 === 0 && latestPlayers.length) syncRemotes(latestPlayers);
@@ -927,7 +1228,7 @@ function frame() {
   // where am I
   if (joined && frameNo % 15 === 0) {
     const pl = places.find((p) => Math.hypot(lp.x - p.x, lp.z - p.z) < p.r);
-    setText("where", "📍 " + (pl ? pl.n.replace(/^\S+\s/, (m) => m) : "🌳 Công viên"));
+    setText("where", pl ? pl.n : "{tree} Công viên");
     if (frameNo % 30 === 0) drawMinimap();
   }
 
@@ -955,6 +1256,9 @@ if (import.meta.env.DEV) {
     me, coaster, wheel, carousel, darts, serverNow, interact, toggleCam,
     get mode() { return mode; },
     get ride() { return myRide; },
+    get held() { return myHeld; },
+    get wallet() { return wallet; },
+    vendors, openShop: (i: number) => openShop(CARTS[i]), buy, useHeld,
     tp(x: number, z: number) { me.pos.set(x, 0, z); },
     setCam(m: "fp" | "tp", yaw?: number, pitch?: number) { camMode = m; if (yaw !== undefined) { camYaw = yaw; rideLookYaw = 0; } if (pitch !== undefined) { camPitch = pitch; rideLookPitch = pitch; } },
   };

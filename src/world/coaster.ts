@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { Collider, makeSign, std } from "../util";
+import { Collider, std } from "../util";
 
 export const COASTER_ORIGIN = new THREE.Vector3(-100, 0, -100);
 
@@ -440,9 +440,6 @@ export class Coaster {
     const rail = new THREE.Mesh(new THREE.BoxGeometry(18, 0.08, 0.08), postMat);
     rail.position.set(8, 1.0, 6.4);
     g.add(rail);
-    const sign = makeSign("TÀU LƯỢN SIÊU TỐC", 12, 2.2, "#e63946", "#fff", "🎢 Cao 30m · Vòng xoắn 360°");
-    sign.position.set(8, 6.2, 6.6);
-    g.add(sign);
     this.group.add(g);
     this.boardZone.set(O.x + 8, 0, O.z + 4);
     this.exitPoint.set(O.x + 8, 0, O.z + 5.5);

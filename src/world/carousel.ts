@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { Collider, makeSign, std } from "../util";
+import { Collider, std } from "../util";
 
 const N = 12;
 const PERIOD = 22;
@@ -136,13 +136,6 @@ export class Carousel {
     }
     this.spinner.traverse((o) => ((o as THREE.Mesh).isMesh && (o.castShadow = true)));
     void white;
-    const sign = makeSign("VÒNG NGỰA GỖ", 7, 1.4, "#ff9f1c", "#fff", "🎠 Nhạc vui · Phi ngựa vòng quanh");
-    sign.position.set(0, 2.6, 9.4);
-    const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 2.6, 8), gold);
-    p1.position.set(-3.3, 1.3, 9.35);
-    const p2 = p1.clone();
-    p2.position.x = 3.3;
-    this.group.add(sign, p1, p2);
   }
 
   private makeHorse(color: string, mane: string) {
