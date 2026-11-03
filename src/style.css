@@ -180,3 +180,13 @@ body.shopping #chat, body.shopping #mobileBtns, body.shopping #board, body.shopp
   .card { padding: 14px 16px 10px; }
   #join.mode-first .sub { display: none; }
 }
+
+/* who's online: click the player-count pill */
+button.pill { display: block; border: 0; color: #fff; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+button.pill:hover, button.pill.open { background: rgba(20,30,60,.75); }
+#playerList { pointer-events: auto; width: fit-content; min-width: 180px; max-width: min(280px, calc(100vw - 30px)); max-height: 45vh; overflow-y: auto; margin-bottom: 6px; padding: 6px; border-radius: 14px; background: rgba(20,30,60,.72); backdrop-filter: blur(6px); }
+#playerList .pl { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 9px; font-size: 14px; font-weight: 600; }
+#playerList .pl.me { background: rgba(255,209,102,.18); }
+#playerList .dot { flex: 0 0 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(255,255,255,.85); }
+#playerList .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#playerList small { margin-left: auto; padding-left: 8px; font-size: 11px; font-weight: 500; opacity: .75; white-space: nowrap; }

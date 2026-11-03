@@ -254,7 +254,64 @@ function syncRemotes(list: PlayerDoc[]) {
     }
   }
   setRich($("online"), `{people} ${seen.size + (joined ? 1 : 0)} đang chơi`);
+  if (playerListOpen) renderPlayerList();
 }
+
+// ---------------- who's online (click the player count) ----------------
+let playerListOpen = false;
+const RIDE_NAMES: Record<string, string> = { coaster: "tàu lượn", wheel: "vòng quay", carousel: "ngựa gỗ" };
+function renderPlayerList() {
+  const el = $("playerList");
+  el.innerHTML = "";
+  const now = serverNow();
+  const rows = [{ name: myName, color: myColor, me: true, note: "bạn" }];
+  const others = latestPlayers
+    .filter((p) => p._id !== myId && now - p.lastSeen <= 20000)
+    .sort((a, b) => a.name.localeCompare(b.name, "vi"));
+  for (const p of others) rows.push({ name: p.name, color: p.color, me: false, note: p.ride ? RIDE_NAMES[p.ride.kind] ?? "" : "" });
+  for (const r of rows) {
+    const row = document.createElement("div");
+    row.className = "pl" + (r.me ? " me" : "");
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    dot.style.background = r.color;
+    const nm = document.createElement("span");
+    nm.className = "nm";
+    nm.textContent = r.name;
+    nm.style.color = r.me ? "#ffd166" : "";
+    row.append(dot, nm);
+    if (r.note) {
+      const sm = document.createElement("small");
+      sm.textContent = r.note;
+      row.appendChild(sm);
+    }
+    el.appendChild(row);
+  }
+  if (!others.length) {
+    const row = document.createElement("div");
+    row.className = "pl";
+    const sm = document.createElement("small");
+    sm.style.margin = "0";
+    sm.textContent = "Chưa có ai khác – rủ bạn bè vào chơi nhé!";
+    row.appendChild(sm);
+    el.appendChild(row);
+  }
+}
+function togglePlayerList(on = !playerListOpen) {
+  playerListOpen = on;
+  show("playerList", on);
+  $("online").classList.toggle("open", on);
+  if (on) renderPlayerList();
+}
+$("online").addEventListener("click", (e) => {
+  e.stopPropagation();
+  togglePlayerList();
+  ($("online") as HTMLButtonElement).blur();
+});
+// tap / click anywhere else closes it
+window.addEventListener("pointerdown", (e) => {
+  if (playerListOpen && !(e.target as HTMLElement).closest?.("#playerList, #online")) togglePlayerList(false);
+}, true);
 
 async function syncTime() {
   if (!client) return;
@@ -401,6 +458,7 @@ input.onKey = (code) => {
     if (code === "Escape") closeEditor();
     return;
   }
+  if (playerListOpen && code === "Escape") return togglePlayerList(false);
   if (shopCart) {
     if (code === "Escape" || code === "KeyQ" || code === "KeyE") closeShop();
     else if (/^(Digit|Numpad)[1-9]$/.test(code)) {
@@ -820,6 +878,7 @@ function setMyAvatar() {
   myAvatar?.dispose();
   myAvatar = new Avatar(myName, myColor, myLook);
   scene.add(myAvatar.group);
+  if (playerListOpen) renderPlayerList();
 }
 
 async function connect() {
