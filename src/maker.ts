@@ -1,6 +1,7 @@
 // Character maker: name + look picker with a live 3D preview (first join and "edit character").
 import * as THREE from "three";
 import { Avatar } from "./avatar";
+import { pixelSprite } from "./pixel";
 import { HAIR_COLORS, HAIR_STYLES, HAIR_STYLE_NAMES, Look, SHIRT_COLORS, SHOE_COLORS, SKIN_TONES, cleanLook, randomLook } from "../convex/looks";
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -116,6 +117,10 @@ export class CharacterMaker {
     this.avatar.label.visible = false;
     this.avatar.group.position.y = -0.02;
     this.scene.add(this.avatar.group);
+    const px = pixelSprite(this.color, this.look);
+    const img = $("pixPreview") as HTMLImageElement;
+    img.classList.toggle("hidden", !px);
+    if (px) img.src = px.url;
   }
 
   /** Starts / stops the preview render loop (only runs while the maker is on screen). */
