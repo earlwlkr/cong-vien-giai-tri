@@ -45,7 +45,7 @@ kbd { background: #eef1f6; border-radius: 4px; padding: 0 4px; border: 1px solid
 #prompt { position: absolute; left: 50%; bottom: calc(120px + env(safe-area-inset-bottom)); transform: translateX(-50%); pointer-events: auto; background: linear-gradient(90deg,#ff4e7a,#ff9f1c); padding: 14px 22px; border-radius: 16px; font-weight: 800; font-size: 17px; box-shadow: 0 8px 22px rgba(0,0,0,.3); cursor: pointer; white-space: nowrap; animation: bob 1.4s ease-in-out infinite; }
 @keyframes bob { 50% { transform: translateX(-50%) translateY(-5px); } }
 #exitBtn { position: absolute; left: 50%; bottom: calc(40px + env(safe-area-inset-bottom)); transform: translateX(-50%); border: 0; border-radius: 14px; padding: 12px 20px; background: rgba(20,30,60,.7); color: #fff; font-weight: 700; font-size: 15px; }
-#rideHud { position: absolute; top: calc(12px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); background: rgba(20,30,60,.65); padding: 10px 18px; border-radius: 14px; font-weight: 700; font-size: 16px; text-align: center; max-width: 70vw; }
+#rideHud { width: fit-content; max-width: calc(100vw - 90px); margin-bottom: 6px; font-weight: 700; }
 #speedo { position: absolute; right: calc(16px + env(safe-area-inset-right)); bottom: calc(110px + env(safe-area-inset-bottom)); width: 110px; padding: 10px; border-radius: 18px; background: rgba(20,30,60,.65); text-align: center; }
 #speedVal { font-size: 38px; font-weight: 900; line-height: 1; }
 #speedo .unit { font-size: 12px; opacity: .8; }
@@ -90,9 +90,11 @@ body.touch #exitBtn { bottom: calc(110px + env(safe-area-inset-bottom)); }
 body.riding #useBtn { bottom: calc(16px + env(safe-area-inset-bottom)); }
 body.riding #where, body.riding #minimap, body.riding #soundBtn, body.riding #editBtn, body.riding #jumpBtn,
 body.riding #stick, body.riding #board, body.riding #prompt { display: none !important; }
-body.riding #exitBtn { left: calc(10px + env(safe-area-inset-left)); top: calc(50px + env(safe-area-inset-top)); bottom: auto; transform: none; padding: 8px 14px; font-size: 14px; border-radius: 999px; background: rgba(20,30,60,.55); backdrop-filter: blur(6px); }
+/* the ride's exit button is moved into #topLeft (setRidingUI) so it stacks under the pills instead of overlapping them */
+body.riding #wallet { display: none; }
+body.riding #exitBtn { position: static; display: block; width: fit-content; transform: none; margin-bottom: 6px; padding: 8px 14px; font-size: 14px; border-radius: 999px; background: rgba(20,30,60,.55); backdrop-filter: blur(6px); }
 body.riding #exitBtn .spr { width: 16px; height: 16px; }
-body.riding #rideHud { padding: 6px 14px; font-size: 14px; border-radius: 999px; background: rgba(20,30,60,.5); }
+body.riding #rideHud { padding: 6px 14px; font-size: 14px; border-radius: 999px; background: rgba(20,30,60,.55); backdrop-filter: blur(6px); }
 body.riding #rideHud .spr { width: 18px; height: 18px; vertical-align: -0.25em; }
 body.riding #speedo { width: 84px; padding: 6px; border-radius: 14px; background: rgba(20,30,60,.5); bottom: calc(16px + env(safe-area-inset-bottom)); }
 body.riding #speedVal { font-size: 28px; }

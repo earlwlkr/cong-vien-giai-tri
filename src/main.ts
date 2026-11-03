@@ -390,6 +390,8 @@ setRich($("exitBtn"), EXIT_LABEL);
 /** On a ride: hide everything that isn't needed while seated (minimap, location, jump, etc). */
 function setRidingUI(on: boolean) {
   document.body.classList.toggle("riding", on);
+  // Seated: stack the exit button in the top-left column (players, ride status, exit) so nothing overlaps.
+  (on ? $("topLeft") : $("ui")).appendChild($("exitBtn"));
   setRich($("exitBtn"), on ? EXIT_LABEL_RIDE : EXIT_LABEL);
 }
 
