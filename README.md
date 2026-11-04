@@ -38,6 +38,16 @@ npx convex dev   # tạo deployment Convex và ghi VITE_CONVEX_URL vào .env.loc
 npm run dev
 ```
 
+## Kiểm thử
+
+```bash
+npm run typecheck
+npm run e2e          # trình duyệt headless: đi hết các trò, ném phi tiêu, mua đồ ăn (~1 phút)
+npm run e2e:bumper   # 2 người chơi đụng xe nhau
+```
+
+Cần Chromium (`/usr/bin/chromium` hoặc biến `CHROMIUM`). Dùng Convex dev trong `.env.local`.
+
 ## Deploy
 
 ```bash

@@ -9,22 +9,18 @@ import { Look, lookFromSeed, lookKey, randomLook } from "../convex/looks";
 import { Input } from "./input";
 import { Sfx } from "./audio";
 import { isTouch, damp, dampAngle, BoxCollider, Collider } from "./util";
-import { Coaster, SEATS } from "./world/coaster";
-import { FerrisWheel } from "./world/ferris";
-import { Carousel } from "./world/carousel";
 import { Darts } from "./world/darts";
-import { DropTower } from "./world/droptower";
-import { BumperCars, CarState, N_CARS, OtherCar } from "./world/bumpers";
+import { buildRides, type Ride, type RideDef, type RideEnv, type RideResult } from "./rides";
+import { keyIndex } from "./rides/types";
 import { buildPark, BOUNDS, PATHS, PLAZA_R } from "./world/park";
 import { drawSprite, hydrateSprites, isSprite, setRich, spriteEl, spriteURL } from "./sprites";
 import { Vendors } from "./world/vendors";
 import { makeItem } from "./items";
-import { CARTS, Cart, XU_QUOTA, XU_REFILL_MS, getItem, isDrink } from "../convex/catalog";
+import { CARTS, Cart, XU_QUOTA, XU_REFILL_MS, cartFront, getItem, isDrink } from "../convex/catalog";
 
 hydrateSprites();
 (document.querySelector("link[rel=icon]") as HTMLLinkElement | null)?.setAttribute("href", spriteURL("coaster"));
 
-type Ride = { kind: string; key: string; seat: number; start: number };
 type Held = { item: string; left: number };
 type PlayerDoc = {
   _id: Id<"players">;
@@ -40,7 +36,6 @@ type PlayerDoc = {
   look: Look | null;
   lastSeen: number;
 };
-type RideResult = { ok: boolean; done: boolean; speed?: number; g?: number; waiting?: number; lift?: boolean; height?: number; left?: number; phase?: string };
 
 const $ = (id: string) => document.getElementById(id)!;
 if (isTouch) document.body.classList.add("touch");
@@ -48,10 +43,12 @@ const CONVEX_URL = import.meta.env.VITE_CONVEX_URL;
 
 // ---------------- renderer / scene ----------------
 const canvas = $("game") as HTMLCanvasElement;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch || devicePixelRatio < 2, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1.5 : 2));
+/** `?lowgfx`: no shadows, no antialiasing, 1x pixels. For headless tests (software GL is slow) and weak devices. */
+const lowGfx = new URLSearchParams(location.search).has("lowgfx");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowGfx && (!isTouch || devicePixelRatio < 2), powerPreference: "high-performance" });
+renderer.setPixelRatio(lowGfx ? 1 : Math.min(devicePixelRatio, isTouch ? 1.5 : 2));
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = !lowGfx;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
@@ -62,7 +59,7 @@ const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 1
 const hemi = new THREE.HemisphereLight("#d6ecff", "#5d7d3a", 1.25);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight("#fff1d6", 2.6);
-sun.castShadow = true;
+sun.castShadow = !lowGfx;
 sun.shadow.mapSize.set(isTouch ? 1024 : 2048, isTouch ? 1024 : 2048);
 Object.assign(sun.shadow.camera, { left: -50, right: 50, top: 50, bottom: -50, near: 1, far: 300 });
 sun.shadow.bias = -0.0004;
@@ -71,64 +68,6 @@ const SUN_OFFSET = new THREE.Vector3(70, 110, 45);
 scene.add(sun, sun.target);
 
 // ---------------- world ----------------
-const coaster = new Coaster();
-scene.add(coaster.group);
-const wheel = new FerrisWheel(70, -70);
-scene.add(wheel.group);
-const carousel = new Carousel(58, 18);
-scene.add(carousel.group);
-const darts = new Darts(-52, 16);
-darts.attach(scene);
-const dartsTarget = new THREE.Vector3(darts.origin.x, 2.3, darts.origin.z - 3.3);
-const tower = new DropTower(0, -40);
-scene.add(tower.group);
-const bumpers = new BumperCars(54, 52);
-scene.add(bumpers.group);
-
-const coasterCells = new Set<string>();
-for (const s of coaster.xzSamples) {
-  const cx = Math.floor(s.x / 4), cz = Math.floor(s.z / 4);
-  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) coasterCells.add(`${cx + a},${cz + b}`);
-}
-function blocked(x: number, z: number) {
-  if (coasterCells.has(`${Math.floor(x / 4)},${Math.floor(z / 4)}`)) return true;
-  if (x > -106 && x < -78 && z > -104 && z < -90) return true;
-  if (Math.abs(x - 70) < 22 && Math.abs(z + 70) < 12) return true;
-  if (Math.hypot(x - 58, z - 18) < 14) return true;
-  if (Math.abs(x + 52) < 8 && z > 8 && z < 27) return true;
-  if (Math.abs(x) < 14 && z > 90) return true;
-  if (Math.hypot(x - tower.center.x, z - tower.center.z) < 10) return true;
-  if (x > bumpers.bounds.minX - 6 && x < bumpers.bounds.maxX + 4 && z > bumpers.bounds.minZ - 4 && z < bumpers.bounds.maxZ + 4) return true;
-  return false;
-}
-const park = buildPark(scene, blocked, isTouch);
-const vendors = new Vendors();
-scene.add(vendors.group);
-const colliders: Collider[] = [...park.colliders, ...coaster.colliders, ...wheel.colliders, ...carousel.colliders, ...vendors.colliders, ...tower.colliders, ...bumpers.colliders];
-const boxes: BoxCollider[] = [...park.boxes, ...darts.boxes, ...bumpers.boxes];
-
-type ZoneId = "coaster" | "wheel" | "carousel" | "darts" | "drop" | "bumper";
-const zones: { id: ZoneId; x: number; z: number; r: number }[] = [
-  { id: "coaster", x: coaster.boardZone.x, z: coaster.boardZone.z, r: 7 },
-  { id: "wheel", x: wheel.boardZone.x, z: wheel.boardZone.z, r: 5 },
-  { id: "carousel", x: carousel.center.x, z: carousel.center.z, r: 11.5 },
-  { id: "darts", x: darts.standPoint.x, z: darts.standPoint.z + 0.8, r: 3.4 },
-  { id: "drop", x: tower.boardZone.x, z: tower.boardZone.z, r: 4.5 },
-  { id: "bumper", x: bumpers.boardZone.x, z: bumpers.boardZone.z, r: 3.2 },
-];
-const places = [
-  { n: "{gate} Cổng chính", x: 0, z: 92, r: 14 },
-  { n: "{fountain} Quảng trường", x: 0, z: 0, r: 24 },
-  { n: "{coaster} Tàu lượn siêu tốc", x: -90, z: -95, r: 22 },
-  { n: "{wheel} Vòng quay mặt trời", x: 70, z: -66, r: 24 },
-  { n: "{horse} Vòng ngựa gỗ", x: 58, z: 18, r: 17 },
-  { n: "{target} Ném phi tiêu", x: -52, z: 19, r: 12 },
-  { n: "{tower} Tháp rơi tự do", x: tower.center.x, z: tower.center.z, r: 12 },
-  { n: "{bumper} Xe điện đụng", x: bumpers.center.x, z: bumpers.center.z, r: 19 },
-  { n: "{icecream} Phố ẩm thực", x: 0, z: 52, r: 22 },
-];
-
-// ---------------- state ----------------
 const input = new Input(canvas);
 const sfx = new Sfx();
 const me = {
@@ -139,6 +78,60 @@ const me = {
   onGround: true,
   pose: "idle" as Pose,
 };
+/** What rides get from the game (see src/rides/types.ts). */
+const rideEnv: RideEnv = {
+  sfx,
+  input,
+  isTouch,
+  me,
+  serverNow: () => serverNow(),
+  toast: (t, ms) => toast(t, ms),
+  setText: (id, t) => setText(id, t),
+  show: (id, on) => show(id, on),
+  shake: (a) => (shake = Math.max(shake, a)),
+  myAvatar: () => myAvatar,
+  remotes: () => remotes.entries(),
+  takenSeats(kind) {
+    const now = serverNow(), taken = new Set<number>();
+    for (const p of latestPlayers) if (p._id !== myId && p.ride?.kind === kind && now - p.lastSeen < 20000) taken.add(keyIndex(p.ride.key));
+    return taken;
+  },
+};
+const rides = buildRides(rideEnv);
+for (const r of rides.list) scene.add(r.object);
+const rideOf = (kind: string | undefined) => (kind ? rides.byKind.get(kind) : undefined);
+const darts = new Darts(-52, 16);
+darts.attach(scene);
+const dartsTarget = new THREE.Vector3(darts.origin.x, 2.3, darts.origin.z - 3.3);
+
+function blocked(x: number, z: number) {
+  if (rides.list.some((r) => r.blocks(x, z))) return true;
+  if (Math.abs(x + 52) < 8 && z > 8 && z < 27) return true; // darts
+  if (Math.abs(x) < 14 && z > 90) return true; // gate
+  return false;
+}
+const park = buildPark(scene, blocked, isTouch);
+const vendors = new Vendors();
+scene.add(vendors.group);
+const colliders: Collider[] = [...park.colliders, ...vendors.colliders, ...rides.list.flatMap((r) => r.colliders)];
+const boxes: BoxCollider[] = [...park.boxes, ...darts.boxes, ...rides.list.flatMap((r) => r.boxes ?? [])];
+
+/** Where E does something: a ride's boarding area, or the darts stand. */
+type Zone = { id: string; ride?: RideDef; x: number; z: number; r: number };
+const zones: Zone[] = [
+  ...rides.list.map((r) => ({ id: r.kind, ride: r, ...r.zone })),
+  { id: "darts", x: darts.standPoint.x, z: darts.standPoint.z + 0.8, r: 3.4 },
+];
+const places = [
+  { n: "{gate} Cổng chính", x: 0, z: 92, r: 14 },
+  { n: "{fountain} Quảng trường", x: 0, z: 0, r: 24 },
+  ...rides.list.map((r) => ({ n: r.place.name, x: r.place.x, z: r.place.z, r: r.place.r })),
+  { n: "{target} Ném phi tiêu", x: -52, z: 19, r: 12 },
+  { n: "{icecream} Phố ẩm thực", x: 0, z: 52, r: 22 },
+];
+const music = rides.list.find((r) => r.music)?.music;
+
+// ---------------- state ----------------
 let joined = false;
 let myId: Id<"players"> | null = null;
 let myName = "";
@@ -152,10 +145,9 @@ let rideLookYaw = 0, rideLookPitch = -0.1;
 let myRide: Ride | null = null;
 let boardingPending = false;
 let mode: "walk" | "ride" | "darts" = "walk";
-let coasterQueued = false;
-let dropQueued = false;
-let lastDropPhase = "";
-let bumpCount = 0, bumpCool = 0, shake = 0, hornUntil = 0;
+/** Scheduled ride kind we're queueing for (boards automatically when it arrives). */
+let queued: string | null = null;
+let shake = 0;
 let fov = 70;
 let myHeld: Held | null = null;
 let usePending = false;
@@ -205,7 +197,9 @@ function renderWallet() {
 // ---------------- networking ----------------
 let client: ConvexClient | null = null;
 let timeOffset = 0;
-const serverNow = () => Date.now() + timeOffset;
+/** DEV only (__game.warp): pretend time has moved on, so tests don't wait out ride schedules. */
+let warpMs = 0;
+const serverNow = () => Date.now() + timeOffset + warpMs;
 interface Remote {
   avatar: Avatar;
   pos: THREE.Vector3;
@@ -218,10 +212,6 @@ interface Remote {
   name: string;
   color: string;
   lookKey: string;
-  /** Smoothed velocity (bumper cars need it to resolve bumps). */
-  vel: THREE.Vector3;
-  /** Recent top velocity, held briefly so a car that already bounced off on its owner's screen still hits us. */
-  velPeak: THREE.Vector3;
 }
 const remotes = new Map<string, Remote>();
 let latestPlayers: PlayerDoc[] = [];
@@ -244,7 +234,7 @@ function syncRemotes(list: PlayerDoc[]) {
     if (!r) {
       const avatar = new Avatar(p.name, p.color, look);
       scene.add(avatar.group);
-      r = { avatar, pos: new THREE.Vector3(p.x, p.y, p.z), target: new THREE.Vector3(), yaw: p.ry, targetYaw: p.ry, anim: p.anim, ride: null, held: p.held, name: p.name, color: p.color, lookKey: lookKey(look), vel: new THREE.Vector3(), velPeak: new THREE.Vector3() };
+      r = { avatar, pos: new THREE.Vector3(p.x, p.y, p.z), target: new THREE.Vector3(), yaw: p.ry, targetYaw: p.ry, anim: p.anim, ride: null, held: p.held, name: p.name, color: p.color, lookKey: lookKey(look) };
       remotes.set(p._id, r);
     }
     const prev = r.held, held = p.held ?? null;
@@ -261,10 +251,7 @@ function syncRemotes(list: PlayerDoc[]) {
       if (cartId) vendors.serve(cartId, performance.now(), false);
     }
     r.held = held;
-    if (p.anim === "horn" && r.anim !== "horn") {
-      r.avatar.puff("bíp bíp!", performance.now());
-      if (r.pos.distanceTo(me.pos) < 30) sfx.horn();
-    }
+    if (p.anim !== r.anim && p.ride) rideOf(p.ride.kind)?.remoteAnim?.(r, p.anim, r.anim);
     r.target.set(p.x, p.y, p.z);
     r.targetYaw = p.ry;
     r.anim = p.anim;
@@ -282,7 +269,6 @@ function syncRemotes(list: PlayerDoc[]) {
 
 // ---------------- who's online (click the player count) ----------------
 let playerListOpen = false;
-const RIDE_NAMES: Record<string, string> = { coaster: "tàu lượn", wheel: "vòng quay", carousel: "ngựa gỗ", drop: "tháp rơi", bumper: "xe đụng" };
 function renderPlayerList() {
   const el = $("playerList");
   el.innerHTML = "";
@@ -291,7 +277,7 @@ function renderPlayerList() {
   const others = latestPlayers
     .filter((p) => p._id !== myId && now - p.lastSeen <= 20000)
     .sort((a, b) => a.name.localeCompare(b.name, "vi"));
-  for (const p of others) rows.push({ name: p.name, color: p.color, me: false, note: p.ride ? RIDE_NAMES[p.ride.kind] ?? "" : "" });
+  for (const p of others) rows.push({ name: p.name, color: p.color, me: false, note: rideOf(p.ride?.kind)?.label ?? "" });
   for (const r of rows) {
     const row = document.createElement("div");
     row.className = "pl" + (r.me ? " me" : "");
@@ -512,27 +498,14 @@ const tmpQuat = new THREE.Quaternion();
 const UP = new THREE.Vector3(0, 1, 0);
 
 function ridePose(ride: Ride, now: number, pos: THREE.Vector3, quat: THREE.Quaternion): RideResult {
-  switch (ride.kind) {
-    case "coaster":
-      return coaster.seatPose(ride.key, ride.seat, now, pos, quat);
-    case "wheel":
-      return wheel.seatPose(ride.key, ride.seat, ride.start, now, pos, quat);
-    case "carousel":
-      return carousel.seatPose(ride.key, now, pos, quat);
-    case "drop":
-      return tower.seatPose(ride.key, ride.seat, now, pos, quat);
-  }
-  return { ok: false, done: true };
+  return rideOf(ride.kind)?.seatPose(ride, now, pos, quat) ?? { ok: false, done: true };
 }
 function placeOnSeat(a: Avatar, pos: THREE.Vector3, quat: THREE.Quaternion) {
   a.group.quaternion.copy(quat);
   a.group.position.copy(pos).sub(new THREE.Vector3(0, HIP_HEIGHT, 0).applyQuaternion(quat));
 }
 function ridePoseName(kind: string, speed = 0): Pose {
-  if (kind === "carousel") return "horse";
-  if (kind === "coaster" && speed > 13) return "cheer";
-  if (kind === "drop" && speed > 8) return "cheer";
-  return "sit";
+  return rideOf(kind)?.pose(speed) ?? "sit";
 }
 
 async function doBoard(kind: string, key: string, maxSeats: number, start: number) {
@@ -546,19 +519,14 @@ async function doBoard(kind: string, key: string, maxSeats: number, start: numbe
     }
     myRide = r;
     mode = "ride";
+    const def = rideOf(r.kind);
+    const pitch = def?.camera.pitch ?? [-0.05, -0.42];
     rideLookYaw = 0;
-    rideLookPitch = camMode === "fp" ? -0.05 : -0.42;
-    lastDropPhase = "";
+    rideLookPitch = camMode === "fp" ? pitch[0] : pitch[1];
     input.resetStick();
     sfx.chime();
     setRidingUI(true);
-    if (r.kind === "bumper") {
-      bumpers.startDriving(carIndex(r.key));
-      bumpCount = 0;
-      rideLookPitch = camMode === "fp" ? -0.1 : -0.3;
-      document.body.classList.add("driving");
-      toast(isTouch ? "{bumper} Kéo bên trái để lái – đụng thoải mái!" : "{bumper} W/S chạy · A/D lái · Space bóp còi", 3500);
-    }
+    def?.onBoard?.(r);
     show("exitBtn", true);
     show("prompt", false);
     show("board", false);
@@ -569,38 +537,23 @@ async function doBoard(kind: string, key: string, maxSeats: number, start: numbe
   }
 }
 
-function boardCoaster() {
-  const st = coaster.boardable(serverNow());
-  if (!st) {
-    coasterQueued = !coasterQueued;
-    if (coasterQueued) toast("{hourglass} Đã xếp hàng! Tàu tới là lên ngay", 1800);
-    return;
-  }
-  coasterQueued = false;
-  doBoard("coaster", st.key, SEATS, st.cycleStart);
-}
-
-function boardDrop() {
-  const st = tower.boardable(serverNow());
-  if (!st) {
-    dropQueued = !dropQueued;
-    if (dropQueued) toast("{hourglass} Đã xếp hàng! Tới lượt là lên ngay", 1800);
-    return;
-  }
-  dropQueued = false;
-  doBoard("drop", st.key, tower.seats, st.cycleStart);
-}
-
-const carIndex = (key: string) => +(key.split(":")[1] ?? 0) % N_CARS;
-function boardBumper() {
+/** E in a ride's zone: board, or (scheduled rides) join / leave the queue. */
+function boardRide(def: RideDef) {
   const now = serverNow();
-  const taken = new Set<number>();
-  for (const p of latestPlayers) {
-    if (p._id !== myId && p.ride?.kind === "bumper" && now - p.lastSeen < 20000) taken.add(carIndex(p.ride.key));
+  if (def.schedule) {
+    const st = def.schedule.boardable(now);
+    if (!st) {
+      queued = queued === def.kind ? null : def.kind;
+      if (queued) toast(def.queuedToast ?? "{hourglass} Đã xếp hàng!", 1800);
+      return;
+    }
+    queued = null;
+    doBoard(def.kind, st.key, st.maxSeats, st.start);
+    return;
   }
-  const i = bumpers.freeCar(taken);
-  if (i < 0) toast("{bumper} Hết xe rồi, đợi chút nhé!");
-  else doBoard("bumper", `bumper:${i}`, 1, now);
+  const spec = def.pick?.(now);
+  if (typeof spec === "string") toast(spec);
+  else if (spec) doBoard(def.kind, spec.key, spec.maxSeats, spec.start);
 }
 
 function interact() {
@@ -615,20 +568,8 @@ function interact() {
     return;
   }
   sfx.init();
-  const now = serverNow();
-  if (z.id === "coaster") boardCoaster();
-  else if (z.id === "wheel") doBoard("wheel", `wheel:${wheel.bottomGondola(now)}`, wheel.seats, now);
-  else if (z.id === "carousel") {
-    const taken = new Set<number>();
-    for (const p of latestPlayers) {
-      if (p._id !== myId && p.ride?.kind === "carousel" && now - p.lastSeen < 20000) taken.add(+p.ride.key.split(":")[1]);
-    }
-    const i = carousel.nearestHorse(me.pos.x, me.pos.z, now, taken);
-    if (i < 0) toast("{horse} Hết ngựa rồi!");
-    else doBoard("carousel", `carousel:${i}`, 1, now);
-  } else if (z.id === "darts") startDarts();
-  else if (z.id === "drop") boardDrop();
-  else if (z.id === "bumper") boardBumper();
+  if (z.ride) boardRide(z.ride);
+  else if (z.id === "darts") startDarts();
 }
 
 // ---------------- food carts ----------------
@@ -799,19 +740,9 @@ function showHeld(a: Avatar, held: Held | null) {
 
 function leaveRideLocal() {
   if (!myRide) return;
-  const now = serverNow();
-  const exit =
-    myRide.kind === "coaster" ? coaster.exitPoint :
-    myRide.kind === "wheel" ? wheel.exitPoint :
-    myRide.kind === "drop" ? tower.exitPoint :
-    myRide.kind === "bumper" ? bumpers.exitPoint :
-    carousel.exitFor(myRide.key, now, new THREE.Vector3());
-  if (myRide.kind === "bumper") {
-    bumpers.stopDriving();
-    document.body.classList.remove("driving");
-    if (bumpCount > 0) toast(`{bumper} Bạn đã đụng ${bumpCount} lần – vui ghê!`, 3000);
-  }
-  me.pos.copy(exit);
+  const def = rideOf(myRide.kind);
+  if (def) me.pos.copy(def.exit(myRide, serverNow()));
+  def?.onLeave?.(myRide);
   me.vel.set(0, 0, 0);
   me.vy = 0;
   myRide = null;
@@ -864,8 +795,7 @@ function endDarts(finished: boolean) {
 function leaveActivity() {
   if (mode === "ride") leaveRide();
   else if (mode === "darts") endDarts(false);
-  else if (coasterQueued) coasterQueued = false;
-  else if (dropQueued) dropQueued = false;
+  else queued = null;
 }
 
 function currentZone() {
@@ -1107,29 +1037,15 @@ mmBg.height = mm.height;
   g.beginPath();
   g.arc(...toMap(0, 0), (PLAZA_R / MM.size) * mm.width, 0, 7);
   g.fill();
-  g.strokeStyle = "#e63946";
-  g.lineWidth = 1.5;
-  g.beginPath();
-  coaster.xzSamples.forEach((s, i) => (i % 4 ? 0 : i ? g.lineTo(...toMap(s.x, s.z)) : g.moveTo(...toMap(s.x, s.z))));
-  g.closePath();
-  g.stroke();
+  for (const r of rides.list) r.drawMap?.(g, toMap, mm.width / MM.size);
   g.strokeStyle = "rgba(255,255,255,.8)";
   g.lineWidth = 1;
   const [bx0, bz0] = toMap(BOUNDS.minX, BOUNDS.minZ);
   const [bx1, bz1] = toMap(BOUNDS.maxX, BOUNDS.maxZ);
   g.strokeRect(bx0, bz0, bx1 - bx0, bz1 - bz0);
   for (const c of CARTS) if (isSprite(c.sprite)) drawSprite(g, c.sprite, ...toMap(c.x, c.z), 10);
-  {
-    const b = bumpers.bounds;
-    const [ax, az] = toMap(b.minX, b.minZ), [bx, bz] = toMap(b.maxX, b.maxZ);
-    g.fillStyle = "#8a93a3";
-    g.fillRect(ax, az, bx - ax, bz - az);
-    g.fillStyle = "#c9b79c";
-    g.beginPath();
-    g.arc(...toMap(tower.center.x, tower.center.z), (7 / MM.size) * mm.width, 0, 7);
-    g.fill();
-  }
-  for (const [e, x, z] of [["coaster", -92, -92], ["wheel", 70, -70], ["horse", 58, 18], ["target", -52, 16], ["fountain", 0, 0], ["gate", 0, 96], ["tower", tower.center.x, tower.center.z], ["bumper", bumpers.center.x, bumpers.center.z]] as const) drawSprite(g, e, ...toMap(x, z), 16);
+  for (const r of rides.list) drawSprite(g, r.place.icon, ...toMap(r.place.x, r.place.z), 16);
+  for (const [e, x, z] of [["target", -52, 16], ["fountain", 0, 0], ["gate", 0, 96]] as const) drawSprite(g, e, ...toMap(x, z), 16);
 }
 function drawMinimap() {
   mmCtx.drawImage(mmBg, 0, 0);
@@ -1195,55 +1111,9 @@ function collide(p: THREE.Vector3) {
   p.z = Math.max(BOUNDS.minZ, Math.min(BOUNDS.maxZ, p.z));
 }
 
-// ---------------- bumper cars ----------------
-const carClaims = new Map<number, CarState & { speed: number }>();
-const otherCars: OtherCar[] = [];
-const BUMP_WORDS = ["bùm!", "rầm!", "oái!", "đụng nè!"];
-/** Steps the car this client drives and returns the rider's seat pose in tmpPos/tmpQuat. */
-function driveBumper(dt: number): RideResult {
-  const d = bumpers.drive;
-  if (!d) return { ok: false, done: true };
-  const mv = input.move();
-  otherCars.length = 0;
-  const claimed = new Set<number>([d.i]);
-  for (const [id, r] of remotes) {
-    if (r.ride?.kind !== "bumper") continue;
-    claimed.add(carIndex(r.ride.key));
-    otherCars.push({ x: r.pos.x, z: r.pos.z, vx: r.velPeak.x, vz: r.velPeak.z, margin: 0.4, id });
-  }
-  for (let i = 0; i < N_CARS; i++) {
-    if (claimed.has(i)) continue;
-    const p = bumpers.parked(i);
-    otherCars.push({ x: p.x, z: p.z, vx: 0, vz: 0, fixed: true });
-  }
-  const hit = bumpers.step(dt, mv.y, mv.x, otherCars);
-  // one hit per approach: forget the rammer's held speed once it has landed
-  if (hit.hit?.id) remotes.get(hit.hit.id)?.velPeak.set(0, 0, 0);
-  bumpCool -= dt;
-  if (hit.impact > 1.2 && bumpCool <= 0) {
-    bumpCool = 0.35;
-    sfx.bump(hit.impact);
-    shake = Math.min(0.3, hit.impact * 0.04);
-    if (hit.car) {
-      bumpCount++;
-      if (hit.impact > 2.5) myAvatar?.puff(BUMP_WORDS[Math.floor(Math.random() * BUMP_WORDS.length)], performance.now());
-    }
-  }
-  if (input.consumeJump()) {
-    sfx.horn();
-    hornUntil = performance.now() + 700;
-    myAvatar?.puff("bíp bíp!", performance.now());
-  }
-  bumpers.seatPose(d, tmpPos, tmpQuat);
-  me.yaw = d.yaw;
-  return { ok: true, done: false, speed: bumpers.speed() };
-}
-
 // ---------------- main loop ----------------
 const clock = new THREE.Clock();
 let frameNo = 0;
-let clackTimer = 0;
-let lastWaiting = 0;
 const lookDir = new THREE.Vector3();
 const eye = new THREE.Vector3();
 const focus = new THREE.Vector3();
@@ -1254,10 +1124,7 @@ function frame() {
   const now = serverNow();
   frameNo++;
 
-  coaster.update(now);
-  wheel.update(now);
-  tower.update(now);
-  carousel.update(now);
+  for (const r of rides.list) r.update?.(now, t);
   park.update(t);
   darts.update(dt, now, scene);
 
@@ -1352,29 +1219,13 @@ function frame() {
 
     // zones / prompt
     const z = currentZone();
-    if (z?.id !== "coaster") coasterQueued = false;
-    if (z?.id !== "drop") dropQueued = false;
+    if (queued && z?.id !== queued) queued = null;
     if (z) {
-      let label = "";
-      if (z.id === "coaster") {
-        const st = coaster.boardable(now);
-        if (coasterQueued) {
-          if (coaster.boardable(now, 3)) boardCoaster();
-          label = `{hourglass} Đang chờ tàu… ${Math.ceil(coaster.nextBoarding(now))}s (bấm để hủy)`;
-        } else if (st) label = `{coaster} Lên tàu lượn! Tàu chạy sau ${Math.ceil(st.dwellLeft)}s${isTouch ? "" : " (E)"}`;
-        else label = `{coaster} Xếp hàng chờ tàu – ${Math.ceil(coaster.nextBoarding(now))}s${isTouch ? "" : " (E)"}`;
-      } else if (z.id === "drop") {
-        const st = tower.boardable(now);
-        if (dropQueued) {
-          if (tower.boardable(now, 3)) boardDrop();
-          label = `{hourglass} Đang chờ lượt… ${Math.ceil(tower.nextBoarding(now))}s (bấm để hủy)`;
-        } else if (st) label = `{tower} Lên tháp rơi! Khởi động sau ${Math.ceil(st.waiting)}s${isTouch ? "" : " (E)"}`;
-        else label = `{tower} Xếp hàng tháp rơi – ${Math.ceil(tower.nextBoarding(now))}s${isTouch ? "" : " (E)"}`;
-      } else if (z.id === "bumper") label = `{bumper} Lái xe điện đụng${isTouch ? "" : " (E)"}`;
-      else if (z.id === "wheel") label = `{wheel} Lên vòng quay mặt trời${isTouch ? "" : " (E)"}`;
-      else if (z.id === "carousel") label = `{horse} Cưỡi ngựa gỗ${isTouch ? "" : " (E)"}`;
-      else label = `{target} Chơi ném phi tiêu${isTouch ? "" : " (E)"}`;
-      setText("prompt", label);
+      const def = z.ride;
+      const isQueued = !!def && queued === def.kind;
+      // queued for a scheduled ride: hop on as soon as it's boarding
+      if (isQueued && def.schedule?.boardable(now, 3)) boardRide(def);
+      setText("prompt", def ? def.prompt(now, isQueued) : `{target} Chơi ném phi tiêu${isTouch ? "" : " (E)"}`);
     }
     const cart = !z && !shopCart ? vendors.at(me.pos.x, me.pos.z) : null;
     if (cart) setText("prompt", `{${cart.sprite}} Mua ${cartName(cart)}${isTouch ? "" : " (E)"}`);
@@ -1388,41 +1239,38 @@ function frame() {
     if (look.zoom && camMode === "tp") camDist = Math.max(2.5, Math.min(16, camDist + look.zoom * 0.8));
     if (camMode === "fp") rideLookYaw = Math.max(-2.4, Math.min(2.4, rideLookYaw));
     rideLookPitch = Math.max(-1.3, Math.min(1.2, rideLookPitch));
-    const kind = myRide.kind;
+    const def = rideOf(myRide.kind);
     let res: RideResult;
-    if (kind === "bumper") res = driveBumper(dt);
+    if (!def) res = { ok: false, done: true };
+    else if (def.drive) res = def.drive(dt, tmpPos, tmpQuat);
     else {
       input.consumeJump();
-      res = ridePose(myRide, now, tmpPos, tmpQuat);
+      res = def.seatPose(myRide, now, tmpPos, tmpQuat);
     }
-    if (!res.ok || res.done) {
+    if (!def || !res.ok || res.done) {
       leaveRide();
-      if (kind === "coaster") toast("{party} Tuyệt vời! Bạn đã chinh phục tàu lượn siêu tốc!", 3500);
-      else if (kind === "wheel") toast("{wheel} Hết một vòng – cảnh đẹp không?", 3000);
-      else if (kind === "drop") toast("{tower} Phù! Bạn đã sống sót sau cú rơi 45m!", 3500);
+      if (def?.doneToast) toast(def.doneToast, 3500);
       sfx.ding();
     } else {
+      const cam = def.camera;
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(tmpQuat);
       eye.set(0, EYE_OFFSET, 0.06).applyQuaternion(tmpQuat).add(tmpPos);
-      // drop tower riders face outward with the column behind them: third person looks back at them from outside
-      const yawOff = kind === "drop" && camMode === "tp" ? Math.PI : 0;
-      const ly = rideLookYaw + yawOff;
+      const ly = rideLookYaw + (cam.lookBack && camMode === "tp" ? Math.PI : 0);
       lookDir.set(Math.sin(ly) * Math.cos(rideLookPitch), Math.sin(rideLookPitch), Math.cos(ly) * Math.cos(rideLookPitch)).applyQuaternion(tmpQuat);
       const speed = res.speed ?? 0;
       if (camMode === "fp") {
         camera.position.copy(eye);
-        if ((kind === "coaster" || kind === "drop") && speed > 8) {
-          const sh = (speed - 8) * 0.0012;
+        if (cam.shakeAbove !== undefined && speed > cam.shakeAbove) {
+          const sh = (speed - cam.shakeAbove) * 0.0012;
           camera.position.x += (Math.random() - 0.5) * sh;
           camera.position.y += (Math.random() - 0.5) * sh;
         }
         camera.up.copy(up);
         camera.lookAt(eye.clone().add(lookDir));
       } else {
-        const dist = kind === "wheel" ? Math.max(camDist, 8) : kind === "coaster" || kind === "drop" ? Math.max(camDist, 7.5) : kind === "bumper" ? Math.max(camDist, 4.5) : camDist;
-        camera.position.copy(eye).addScaledVector(lookDir, -dist);
-        if (kind === "bumper" && camera.position.y < 0.6) camera.position.y = 0.6;
-        camera.up.copy(kind === "coaster" ? up : UP);
+        camera.position.copy(eye).addScaledVector(lookDir, -Math.max(camDist, cam.tpMin ?? 0));
+        if (cam.floor !== undefined && camera.position.y < cam.floor) camera.position.y = cam.floor;
+        camera.up.copy(cam.tilt ? up : UP);
         camera.lookAt(eye);
       }
       if (shake > 0) {
@@ -1430,73 +1278,21 @@ function frame() {
         camera.position.y += (Math.random() - 0.5) * shake;
         shake = Math.max(0, shake - dt * 0.8);
       }
-      const fovTarget = kind === "coaster" ? 70 + Math.min(20, speed * 0.75) : kind === "drop" ? 70 + Math.min(18, speed * 0.8) : kind === "bumper" ? 70 + speed * 1.2 : 70;
-      fov = damp(fov, fovTarget, 3, dt);
+      fov = damp(fov, cam.fov ? cam.fov(speed) : 70, 3, dt);
       focus.copy(tmpPos);
       if (myAvatar) {
         placeOnSeat(myAvatar, tmpPos, tmpQuat);
-        myAvatar.animate(ridePoseName(myRide.kind, speed), 1, dt, performance.now());
+        myAvatar.animate(def.pose(speed), 1, dt, performance.now());
         myAvatar.setFirstPerson(camMode === "fp");
       }
-      const car = bumpers.drive;
-      if (kind === "bumper" && car) netTick(sendPos.set(car.x, 0, car.z), car.yaw, performance.now() < hornUntil ? "horn" : "drive");
-      else netTick(sendPos.copy(tmpPos), me.yaw, ridePoseName(kind));
+      const ns = def.netState?.();
+      if (ns) netTick(ns.pos, ns.ry, ns.anim);
+      else netTick(sendPos.copy(tmpPos), me.yaw, def.pose(0));
 
-      // HUD
-      if (myRide.kind === "coaster") {
-        const waiting = res.waiting ?? 0;
-        if (waiting > 0) {
-          setText("rideHud", `{lock} Khởi hành sau ${Math.ceil(waiting)}s`);
-          show("rideHud", true);
-          show("speedo", false);
-        } else {
-          if (lastWaiting > 0) { sfx.ding(); toast("{rocket} Xuất phát!", 1500); }
-          show("rideHud", !!res.lift);
-          if (res.lift) setText("rideHud", "{chain} Lên dốc 30m…");
-          show("speedo", true);
-          setText("speedVal", String(Math.round(speed * 3.6)));
-          setText("gVal", `${(res.g ?? 1).toFixed(1)} G`);
-        }
-        lastWaiting = waiting;
-        sfx.setWind(Math.max(0, Math.min(1, (speed - 3) / 22)));
-        if (res.lift) {
-          clackTimer -= dt;
-          if (clackTimer <= 0) { sfx.clack(); clackTimer = 0.22; }
-        }
-      } else if (myRide.kind === "wheel") {
-        setText("rideHud", `{wheel} ${Math.max(0, res.height ?? 0).toFixed(0)} m · ${Math.ceil(res.left ?? 0)}s`);
-        show("rideHud", true);
-        sfx.setWind(Math.max(0, ((res.height ?? 0) - 15) / 40));
-      } else if (kind === "drop") {
-        const ph = res.phase ?? "";
-        const h = Math.max(0, res.height ?? 0);
-        const falling = ph === "fall" || ph === "brake" || ph === "lower";
-        if (ph !== lastDropPhase) {
-          if (ph === "rise") { sfx.ding(); toast("{chain} Bắt đầu lên!", 1500); }
-          else if (ph === "fall") { sfx.whoosh(); myAvatar?.puff("Aaaaa!", performance.now()); }
-          else if (ph === "brake") { sfx.clack(); setTimeout(() => sfx.clack(), 90); setTimeout(() => sfx.clack(), 180); }
-          lastDropPhase = ph;
-        }
-        if (ph === "board") setText("rideHud", `{lock} Khởi động sau ${Math.ceil(res.waiting ?? 0)}s`);
-        else if (ph === "rise") setText("rideHud", `{chain} Lên cao… ${h.toFixed(0)} m`);
-        else if (ph === "hold") setText("rideHud", `{eye} ${h.toFixed(0)} m – giữ chặt nhé…`);
-        show("rideHud", !falling);
-        show("speedo", falling);
-        if (falling) {
-          setText("speedVal", String(Math.round(speed * 3.6)));
-          setText("gVal", `${(res.g ?? 1).toFixed(1)} G`);
-        }
-        if (ph === "rise") {
-          clackTimer -= dt;
-          if (clackTimer <= 0) { sfx.clack(); clackTimer = 0.45; }
-        }
-        sfx.setWind(Math.max(Math.min(1, speed / 24), (h - 25) / 60));
-      } else if (kind === "bumper") {
-        setText("rideHud", `{bumper} ${Math.round(speed * 3.6)} km/h · Đụng ${bumpCount} lần`);
-        show("rideHud", true);
-        sfx.setWind(Math.min(0.25, speed / 30));
-      } else {
+      if (def.hud) def.hud(res, dt);
+      else {
         show("rideHud", false);
+        sfx.setWind(0);
       }
     }
   } else if (mode === "darts") {
@@ -1541,43 +1337,26 @@ function frame() {
   }
 
   // remotes
-  carClaims.clear();
-  if (mode === "ride" && bumpers.drive) carClaims.set(bumpers.drive.i, { ...bumpers.drive, speed: bumpers.speed() });
   for (const r of remotes.values()) {
     let pose: Pose = (["idle", "walk", "run", "jump", "throw"].includes(r.anim) ? r.anim : "idle") as Pose;
     let seated = false;
-    if (r.ride?.kind === "bumper") {
-      // driven locally by its owner: follow the streamed car position
-      if (r.pos.distanceToSquared(r.target) > 100) r.pos.copy(r.target);
-      const px = r.pos.x, pz = r.pos.z;
-      r.pos.x = damp(r.pos.x, r.target.x, 10, dt);
-      r.pos.z = damp(r.pos.z, r.target.z, 10, dt);
-      r.pos.y = 0;
-      r.yaw = dampAngle(r.yaw, r.targetYaw, 10, dt);
-      if (dt > 0) {
-        r.vel.x = damp(r.vel.x, (r.pos.x - px) / dt, 8, dt);
-        r.vel.z = damp(r.vel.z, (r.pos.z - pz) / dt, 8, dt);
-      }
-      if (r.vel.lengthSq() >= r.velPeak.lengthSq()) r.velPeak.copy(r.vel);
-      else r.velPeak.multiplyScalar(Math.exp(-dt / 0.3));
-      const c: CarState = { x: r.pos.x, z: r.pos.z, yaw: r.yaw };
-      carClaims.set(carIndex(r.ride.key), { ...c, speed: Math.hypot(r.vel.x, r.vel.z) });
-      bumpers.seatPose(c, tmpPos, tmpQuat);
+    const def = rideOf(r.ride?.kind);
+    if (r.ride && def?.follow) {
+      // a ride its owner steers: follow their streamed state
+      def.follow(r, dt, tmpPos, tmpQuat);
       placeOnSeat(r.avatar, tmpPos, tmpQuat);
-      pose = "sit";
+      pose = def.pose(0);
       seated = true;
-    } else if (r.ride) {
-      const res = ridePose(r.ride, now, tmpPos, tmpQuat);
+    } else if (r.ride && def) {
+      const res = def.seatPose(r.ride, now, tmpPos, tmpQuat);
       if (res.ok && !res.done) {
         placeOnSeat(r.avatar, tmpPos, tmpQuat);
-        pose = ridePoseName(r.ride.kind, res.speed ?? 0);
+        pose = def.pose(res.speed ?? 0);
         r.pos.copy(tmpPos);
         seated = true;
       }
     }
     if (!seated) {
-      r.vel.set(0, 0, 0);
-      r.velPeak.set(0, 0, 0);
       if (r.pos.distanceToSquared(r.target) > 100) r.pos.copy(r.target);
       r.pos.x = damp(r.pos.x, r.target.x, 10, dt);
       r.pos.y = damp(r.pos.y, r.target.y, 10, dt);
@@ -1591,12 +1370,12 @@ function frame() {
     r.avatar.animate(pose, 1, dt, performance.now());
   }
   if (frameNo % 120 === 0 && latestPlayers.length) syncRemotes(latestPlayers);
-  bumpers.update(t, carClaims);
+  for (const r of rides.list) r.afterRemotes?.(t);
 
-  // carousel music by proximity
+  // ride music by proximity
   const lp = mode === "ride" ? tmpPos : me.pos;
-  const dCar = Math.hypot(lp.x - carousel.center.x, lp.z - carousel.center.z);
-  sfx.setMusic(joined ? Math.max(0, Math.min(1, 1 - (dCar - 6) / 35)) : 0);
+  const dMusic = music ? Math.hypot(lp.x - music.x, lp.z - music.z) : Infinity;
+  sfx.setMusic(joined ? Math.max(0, Math.min(1, 1 - (dMusic - 6) / 35)) : 0);
 
   // where am I
   if (joined && frameNo % 15 === 0) {
@@ -1626,13 +1405,18 @@ document.addEventListener("gesturestart", (e) => e.preventDefault());
 
 if (import.meta.env.DEV) {
   (window as any).__game = {
-    me, coaster, wheel, carousel, darts, tower, bumpers, serverNow, interact, toggleCam,
+    me, ...rides.world, rides: rides.byKind, darts, serverNow, interact, toggleCam,
     get mode() { return mode; },
     get ride() { return myRide; },
     get held() { return myHeld; },
     get wallet() { return wallet; },
     vendors, openShop: (i: number) => openShop(CARTS[i]), buy, useHeld,
+    cartFront: (i: number) => cartFront(CARTS[i]),
     tp(x: number, z: number) { me.pos.set(x, 0, z); },
+    /** Jump the shared clock forward (seconds). Local only: the server and other players don't see it. */
+    warp(sec: number) { warpMs += sec * 1000; },
+    /** Seconds until a scheduled ride (coaster, drop) next starts boarding. */
+    nextBoarding(kind: string) { return rideOf(kind)?.schedule?.nextBoarding(serverNow()) ?? null; },
     setCam(m: "fp" | "tp", yaw?: number, pitch?: number) { camMode = m; if (yaw !== undefined) { camYaw = yaw; rideLookYaw = 0; } if (pitch !== undefined) { camPitch = pitch; rideLookPitch = pitch; } },
   };
 }
