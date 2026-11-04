@@ -100,6 +100,8 @@ body.riding #speedo { width: 84px; padding: 6px; border-radius: 14px; background
 body.riding #speedVal { font-size: 28px; }
 body.riding #gVal { font-size: 13px; margin-top: 2px; }
 body.touch.riding #speedo { bottom: calc(80px + env(safe-area-inset-bottom)); }
+/* bumper cars: you steer, so the touch stick stays */
+body.riding.driving #stick:not(.hidden) { display: block !important; }
 
 /* ---- Xu wallet, shop, eating ---- */
 #wallet { background: rgba(120,70,0,.6); }

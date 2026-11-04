@@ -99,6 +99,20 @@ export class Sfx {
   clack() { this.burst(1800, 4, 0.05, 0.35); }
   pop() { this.burst(900, 0.8, 0.12, 0.9); this.burst(3000, 1, 0.06, 0.4, "highpass"); }
   whoosh() { this.burst(1200, 0.6, 0.25, 0.25); }
+  /** Rubber-bumper thud, louder for harder hits (impact speed in m/s). */
+  bump(impact: number) {
+    const k = Math.min(1, impact / 6);
+    this.burst(140, 1.2, 0.28, 0.35 + k * 0.6, "lowpass");
+    this.burst(650, 2.5, 0.07, 0.15 + k * 0.25);
+  }
+  horn() {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    for (const d of [0, 0.22]) {
+      this.tone(440, 0.16, 0.08, "square", t + d);
+      this.tone(554, 0.16, 0.06, "square", t + d);
+    }
+  }
   /** Coins dropping into the seller's tin. */
   coin() {
     if (!this.enabled || !this.ctx) return;

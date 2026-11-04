@@ -11,6 +11,8 @@ export const PATHS: Path[] = [
   { pts: [[13, -14], [55, -55], [70, -62]], w: 5 },
   { pts: [[19, 5], [48, 16]], w: 5 },
   { pts: [[-19, 5], [-48, 24]], w: 5 },
+  { pts: [[0, -19], [0, -33]], w: 5 }, // drop tower
+  { pts: [[4, 52], [38.5, 52]], w: 5 }, // bumper cars
 ];
 export const PLAZA_R = 20;
 
@@ -253,6 +255,8 @@ export function buildPark(scene: THREE.Scene, blocked: (x: number, z: number) =>
     { path: 2, title: "VÒNG QUAY MẶT TRỜI", bg: "#8338ec", sub: "{wheel} Ngắm toàn cảnh công viên" },
     { path: 3, title: "VÒNG NGỰA GỖ", bg: "#ff9f1c", sub: "{horse} Nhạc vui · Phi ngựa vòng quanh" },
     { path: 4, title: "NÉM PHI TIÊU", bg: "#3a86ff", sub: "{target} Bắn bóng bay · Lên bảng vàng" },
+    { path: 5, title: "THÁP RƠI TỰ DO", bg: "#3a0ca3", sub: "{tower} Cao 45m · Rơi tự do 84 km/h" },
+    { path: 6, title: "XE ĐIỆN ĐỤNG", bg: "#e63946", sub: "{bumper} Tự lái · Đụng thoải mái" },
   ];
   const archPostGeo = new THREE.CylinderGeometry(0.14, 0.16, 5.6, 10);
   const archPostMat = std("#ffffff");
