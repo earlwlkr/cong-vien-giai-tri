@@ -1,6 +1,7 @@
 import "./style.css";
 import * as THREE from "three";
 import { ConvexClient } from "convex/browser";
+import { inject as injectAnalytics } from "@vercel/analytics";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import { Avatar, Pose, HIP_HEIGHT, EYE_HEIGHT, EYE_OFFSET } from "./avatar";
@@ -41,13 +42,9 @@ const $ = (id: string) => document.getElementById(id)!;
 if (isTouch) document.body.classList.add("touch");
 const CONVEX_URL = import.meta.env.VITE_CONVEX_URL;
 
-// Vercel Web Analytics (page views / visitors). Only on deployed builds: the script lives on Vercel.
-if (import.meta.env.PROD && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) {
-  const s = document.createElement("script");
-  s.defer = true;
-  s.src = "/_vercel/insights/script.js";
-  document.head.appendChild(s);
-}
+// Vercel Web Analytics (page views / visitors / referrers). Deployed builds only: the script is
+// served by Vercel at /_vercel/insights, so dev, e2e and `vite preview` skip it.
+if (import.meta.env.PROD && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) injectAnalytics({ framework: "vite" });
 
 // ---------------- renderer / scene ----------------
 const canvas = $("game") as HTMLCanvasElement;

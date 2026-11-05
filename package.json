@@ -15,6 +15,7 @@
     "stats:dev": "node scripts/stats.mjs --dev"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "convex": "^1.49.0",
     "three": "^0.187.0"
   },
