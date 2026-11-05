@@ -10,8 +10,9 @@
     "typecheck": "tsc --noEmit",
     "e2e": "node e2e/smoke.mjs",
     "e2e:bumper": "node e2e/bumper-mp.mjs",
-    "stats": "convex run --prod stats:summary",
-    "stats:dev": "convex run stats:summary"
+    "e2e:ride-sync": "node e2e/ride-sync.mjs",
+    "stats": "node scripts/stats.mjs",
+    "stats:dev": "node scripts/stats.mjs --dev"
   },
   "dependencies": {
     "convex": "^1.49.0",

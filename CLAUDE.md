@@ -37,14 +37,14 @@ World layout (metres; +z = south, entrance gate at z≈99): plaza (0,0); coaster
 
 ## Analytics
 - `convex/stats.ts`: mutations call `logEvent` (`join`, `new`, `board`, `buy`, `darts`) into `events`; a cron writes `snapshots` (online / riding) every 5 min; the nightly cron (00:10 Vietnam time) rolls the finished day into `daily` and prunes raw rows (events 30 days, snapshots 90). New trackable action: add a type to `logEvent` and a case in `add()`.
-- Read: `npm run stats` (prod, last 7 days), `npm run stats -- '{"days":30}'`, `npm run stats:dev`. Re-run a day: `npx convex run --prod stats:rollup '{"day":"YYYY-MM-DD"}'`.
+- Read: `npm run stats` (prod, last 7 days, tables via `scripts/stats.mjs`), `npm run stats -- --days 30`, `--json`, `npm run stats:dev`. Raw rows: Convex dashboard → Data → `events` / `daily` / `snapshots`. Re-run a day: `npx convex run --prod stats:rollup '{"day":"YYYY-MM-DD"}'`.
 - Never log in `players.update` (runs every 110 ms per player). No IPs or user agents: profile ids only.
 - Page views / visitors / referrers: Vercel Web Analytics (script injected on deployed builds only, see top of `main.ts`).
 
 ## Conventions
 - UI strings in Vietnamese, sprites via `{token}`, no emoji. Keep the HUD minimal while riding (`body.riding`).
 - Touch must work (left-half joystick, right-half look, buttons in `#mobileBtns`). Test both if UI changes.
-- Shared state goes through Convex mutations; positions stream via `players.update` about every 110 ms.
+- Shared state goes through Convex mutations; positions stream via `players.update` about every 110 ms while moving, a 5 s heartbeat otherwise. Every `players` write re-runs `players.list` for all clients, so keep those writes rare: riders on clock-driven rides only heartbeat (`netTick(..., clockDriven)`).
 
 ## Testing
 - `npm run typecheck`, `npm run build`.

@@ -1,7 +1,7 @@
 // Player and ride analytics. Mutations elsewhere call `logEvent`; crons take a snapshot of who is
 // online every 5 minutes and roll each finished day up into `daily`. Read it with
-//   npm run stats            (prod, last 7 days)      npm run stats -- '{"days":30}'
-//   npm run stats:dev        (dev deployment)
+//   npm run stats            (prod, last 7 days; scripts/stats.mjs)   npm run stats -- --days 30
+//   npm run stats:dev        (dev deployment)                         npm run stats -- --json
 // Days are Vietnam time (UTC+7, no DST).
 import { internalMutation, internalQuery, MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";

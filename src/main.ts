@@ -330,10 +330,10 @@ window.addEventListener("pointerdown", (e) => {
   if (playerListOpen && !(e.target as HTMLElement).closest?.("#playerList, #online")) togglePlayerList(false);
 }, true);
 
-async function syncTime() {
+async function syncTime(samples = 4) {
   if (!client || (import.meta.env.DEV && (window as any).__holdTime)) return;
   let best = Infinity;
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < samples; i++) {
     const t0 = Date.now();
     const s = await client.mutation(api.time.now, {});
     const t1 = Date.now();
@@ -344,15 +344,24 @@ async function syncTime() {
   }
 }
 
+/** Keep-alive while not moving. Others drop us after 20 s without one (and convex/players.ts join). */
+const HEARTBEAT_MS = 5000;
 let lastSent = { x: 0, y: 0, z: 0, ry: 0, anim: "", t: 0 };
 let inflight = false;
 const sendPos = new THREE.Vector3();
-function netTick(pos: THREE.Vector3, ry: number, anim: string) {
+/**
+ * Streams our position (players.update, the hottest Convex call: every write re-runs players.list
+ * for everyone). Standing still, or seated on a clock-driven ride (`clockDriven`: everyone places
+ * us from `ride` + the shared clock), only sends a keep-alive heartbeat.
+ */
+function netTick(pos: THREE.Vector3, ry: number, anim: string, clockDriven = false) {
   if (!client || !myId || inflight) return;
   const t = performance.now();
   if (t - lastSent.t < 110) return;
-  const moved = Math.abs(pos.x - lastSent.x) + Math.abs(pos.y - lastSent.y) + Math.abs(pos.z - lastSent.z) > 0.04 || Math.abs(ry - lastSent.ry) > 0.05 || anim !== lastSent.anim;
-  if (!moved && t - lastSent.t < 2500) return;
+  const moved =
+    anim !== lastSent.anim ||
+    (!clockDriven && (Math.abs(pos.x - lastSent.x) + Math.abs(pos.y - lastSent.y) + Math.abs(pos.z - lastSent.z) > 0.04 || Math.abs(ry - lastSent.ry) > 0.05));
+  if (!moved && t - lastSent.t < HEARTBEAT_MS) return;
   lastSent = { x: pos.x, y: pos.y, z: pos.z, ry, anim, t };
   inflight = true;
   client
@@ -980,7 +989,8 @@ function startSession(c: ConvexClient) {
     topScores = s;
     renderBoard();
   });
-  setInterval(() => syncTime().catch(() => {}), 60000);
+  // clocks drift by milliseconds per hour; re-sync rarely (each sample is a Convex call)
+  setInterval(() => syncTime(2).catch(() => {}), 5 * 60_000);
 }
 
 /** Joins as the saved profile. Returns false if this device has none yet. */
@@ -1297,7 +1307,7 @@ function frame() {
       }
       const ns = def.netState?.();
       if (ns) netTick(ns.pos, ns.ry, ns.anim);
-      else netTick(sendPos.copy(tmpPos), me.yaw, def.pose(0));
+      else netTick(sendPos.copy(tmpPos), me.yaw, def.pose(0), true);
 
       if (def.hud) def.hud(res, dt);
       else {
@@ -1432,7 +1442,7 @@ if (import.meta.env.DEV) {
     warp(sec: number) { warpMs += sec * 1000; },
     /** Seconds until a scheduled ride (coaster, drop) next starts boarding. */
     nextBoarding(kind: string) { return rideOf(kind)?.schedule?.nextBoarding(serverNow()) ?? null; },
-    camera, scene, renderer,
+    camera, scene, renderer, remotes,
     set cine(f: typeof cine) { cine = f; },
     setCam(m: "fp" | "tp", yaw?: number, pitch?: number) { camMode = m; if (yaw !== undefined) { camYaw = yaw; rideLookYaw = 0; } if (pitch !== undefined) { camPitch = pitch; rideLookPitch = pitch; } },
   };

@@ -10,8 +10,8 @@ export const send = mutation({
     if (!t) return false;
     const last = await ctx.db
       .query("messages")
+      .withIndex("by_player", (q) => q.eq("playerId", id))
       .order("desc")
-      .filter((q) => q.eq(q.field("playerId"), id))
       .first();
     if (last && Date.now() - last._creationTime < 700) return false;
     await ctx.db.insert("messages", { playerId: id, name: p.name, color: p.color, text: t });

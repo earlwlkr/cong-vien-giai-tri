@@ -50,7 +50,7 @@ export const join = mutation({
     // Rows that are still live belong to another open tab and are left alone.
     const rows = await ctx.db.query("players").withIndex("by_profile", (q) => q.eq("profile", prof._id)).collect();
     for (const p of rows) {
-      if (now - p.lastSeen < 4000) continue;
+      if (now - p.lastSeen < 8000) continue; // > the client's 5 s heartbeat
       await persist(ctx, p);
       const s = spotOf(p);
       if (s && p.lastSeen >= savedAt) { spot = s; savedAt = p.lastSeen; }
@@ -225,8 +225,22 @@ export const cleanup = internalMutation({
       await persist(ctx, p);
       await ctx.db.delete(p._id);
     }
-    // keep chat history bounded
-    const msgs = await ctx.db.query("messages").order("desc").collect();
-    for (const m of msgs.slice(300)) await ctx.db.delete(m._id);
+  },
+});
+
+/** Hourly: drops chat older than CHAT_DAYS, but never the last CHAT_KEEP lines the client shows. */
+const CHAT_DAYS = 3;
+const CHAT_KEEP = 40;
+export const pruneChat = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const recent = await ctx.db.query("messages").order("desc").take(CHAT_KEEP);
+    if (recent.length < CHAT_KEEP) return;
+    const cutoff = Math.min(Date.now() - CHAT_DAYS * 86_400_000, recent[CHAT_KEEP - 1]._creationTime);
+    const old = await ctx.db
+      .query("messages")
+      .withIndex("by_creation_time", (q) => q.lt("_creationTime", cutoff))
+      .take(500);
+    for (const m of old) await ctx.db.delete(m._id);
   },
 });

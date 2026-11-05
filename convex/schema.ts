@@ -54,7 +54,7 @@ export default defineSchema({
     name: v.string(),
     color: v.string(),
     text: v.string(),
-  }),
+  }).index("by_player", ["playerId"]),
   /** Xu balance per device (random token kept in localStorage); survives player rows. */
   wallets: defineTable({
     token: v.string(),
