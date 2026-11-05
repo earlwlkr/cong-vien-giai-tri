@@ -96,16 +96,24 @@ function menuBoard(c: Cart) {
       x.fillText(`${it.price} Xu`, 74, y + 22);
     });
   });
-  const face = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.0), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }));
-  face.position.set(0, 0.95, 0.135);
-  face.rotation.x = -0.22;
-  const back = new THREE.Mesh(new THREE.BoxGeometry(0.82, 1.02, 0.03), std("#6b4220"));
-  back.position.set(0, 0.95, 0.105);
-  back.rotation.x = -0.22;
-  const back2 = back.clone();
-  back2.position.z = -0.105;
-  back2.rotation.x = 0.22;
-  g.add(back, back2, face);
+  // Two boards hinged at the top, each long enough that its foot rests on the ground.
+  const tilt = 0.22, len = 1.5;
+  const hingeY = len * Math.cos(tilt);
+  const wood = std("#6b4220");
+  for (const s of [1, -1]) {
+    const side = new THREE.Group();
+    side.position.y = hingeY;
+    side.rotation.x = -s * tilt;
+    const board = new THREE.Mesh(new THREE.BoxGeometry(0.82, len, 0.03), wood);
+    board.position.y = -len / 2;
+    side.add(board);
+    if (s === 1) {
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.0), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }));
+      face.position.set(0, -0.56, 0.017);
+      side.add(face);
+    }
+    g.add(side);
+  }
   return g;
 }
 
