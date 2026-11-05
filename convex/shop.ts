@@ -2,6 +2,7 @@ import { mutation, query, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { CARTS, XU_QUOTA, XU_REFILL_MS, cartFront, getItem } from "./catalog";
 import { logEvent } from "./stats";
+import { posOf } from "./players";
 
 const validToken = (t: string) => /^[A-Za-z0-9-]{16,64}$/.test(t);
 
@@ -51,7 +52,8 @@ export const buy = mutation({
     const item = getItem(a.item);
     if (!cart || !item || !cart.items.includes(a.item as never)) return { ok: false as const, reason: "item" };
     const f = cartFront(cart);
-    if (p.ride || Math.hypot(p.x - f.x, p.z - f.z) > 8) return { ok: false as const, reason: "far" };
+    const pos = await posOf(ctx, p._id);
+    if (p.ride || !pos || Math.hypot(pos.x - f.x, pos.z - f.z) > 8) return { ok: false as const, reason: "far" };
 
     const now = Date.now();
     const w = await loadWallet(ctx, a.token);
@@ -65,7 +67,7 @@ export const buy = mutation({
     if (balance >= XU_QUOTA) cycleStart = now;
     balance -= item.price;
     await ctx.db.patch(w._id, { balance, cycleStart, lastBuy: now });
-    await ctx.db.patch(a.id, { held: { item: a.item, left: item.bites }, lastSeen: now });
+    await ctx.db.patch(a.id, { held: { item: a.item, left: item.bites } });
     await logEvent(ctx, { type: "buy", kind: a.item, profile: p.profile });
     return { ok: true as const, balance, cycleStart };
   },
@@ -79,7 +81,7 @@ export const use = mutation({
     if (!p?.held) return null;
     const left = p.held.left - 1;
     const held = left > 0 ? { item: p.held.item, left } : null;
-    await ctx.db.patch(id, { held, lastSeen: Date.now() });
+    await ctx.db.patch(id, { held });
     return { item: p.held.item, left: Math.max(0, left) };
   },
 });

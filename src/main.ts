@@ -37,6 +37,10 @@ type PlayerDoc = {
   look: Look | null;
   lastSeen: number;
 };
+/** players.list row: who someone is and what they're doing (rarely changes). */
+type RosterDoc = Omit<PlayerDoc, "x" | "y" | "z" | "ry" | "anim" | "lastSeen">;
+/** players.positions row: where they are (the 110 ms stream). */
+type PosDoc = { p: Id<"players">; x: number; y: number; z: number; ry: number; anim: string; t: number };
 
 const $ = (id: string) => document.getElementById(id)!;
 if (isTouch) document.body.classList.add("touch");
@@ -139,6 +143,8 @@ const music = rides.list.find((r) => r.music)?.music;
 // ---------------- state ----------------
 let joined = false;
 let myId: Id<"players"> | null = null;
+/** Our row in `positions`: what players.update writes. */
+let myPos: Id<"positions"> | null = null;
 let myName = "";
 let myColor = "#ff4e7a";
 let myLook: Look = randomLook();
@@ -220,6 +226,17 @@ interface Remote {
 }
 const remotes = new Map<string, Remote>();
 let latestPlayers: PlayerDoc[] = [];
+let roster: RosterDoc[] = [];
+let posByPlayer = new Map<string, PosDoc>();
+/** Joins the two subscriptions into the PlayerDoc shape the rest of the client uses. */
+function mergedPlayers(): PlayerDoc[] {
+  const out: PlayerDoc[] = [];
+  for (const p of roster) {
+    const q = posByPlayer.get(p._id);
+    if (q) out.push({ ...p, x: q.x, y: q.y, z: q.z, ry: q.ry, anim: q.anim, lastSeen: q.t });
+  }
+  return out;
+}
 
 function syncRemotes(list: PlayerDoc[]) {
   latestPlayers = list;
@@ -343,6 +360,10 @@ async function syncTime(samples = 4) {
 
 /** Keep-alive while not moving. Others drop us after 20 s without one (and convex/players.ts join). */
 const HEARTBEAT_MS = 5000;
+/** Walking: others smooth toward each update, so 150 ms looks the same as faster. */
+const WALK_SEND_MS = 150;
+/** Driven rides (bumper cars): collisions between players need fresher positions. */
+const DRIVE_SEND_MS = 110;
 let lastSent = { x: 0, y: 0, z: 0, ry: 0, anim: "", t: 0 };
 let inflight = false;
 const sendPos = new THREE.Vector3();
@@ -351,10 +372,10 @@ const sendPos = new THREE.Vector3();
  * for everyone). Standing still, or seated on a clock-driven ride (`clockDriven`: everyone places
  * us from `ride` + the shared clock), only sends a keep-alive heartbeat.
  */
-function netTick(pos: THREE.Vector3, ry: number, anim: string, clockDriven = false) {
-  if (!client || !myId || inflight) return;
+function netTick(pos: THREE.Vector3, ry: number, anim: string, clockDriven = false, every = WALK_SEND_MS) {
+  if (!client || !myPos || inflight) return;
   const t = performance.now();
-  if (t - lastSent.t < 110) return;
+  if (t - lastSent.t < every) return;
   const moved =
     anim !== lastSent.anim ||
     (!clockDriven && (Math.abs(pos.x - lastSent.x) + Math.abs(pos.y - lastSent.y) + Math.abs(pos.z - lastSent.z) > 0.04 || Math.abs(ry - lastSent.ry) > 0.05));
@@ -362,7 +383,7 @@ function netTick(pos: THREE.Vector3, ry: number, anim: string, clockDriven = fal
   lastSent = { x: pos.x, y: pos.y, z: pos.z, ry, anim, t };
   inflight = true;
   client
-    .mutation(api.players.update, { id: myId, x: pos.x, y: pos.y, z: pos.z, ry, anim })
+    .mutation(api.players.update, { pos: myPos, x: pos.x, y: pos.y, z: pos.z, ry, anim })
     .then((ok) => {
       if (ok === false) rejoin();
     })
@@ -375,7 +396,10 @@ async function rejoin() {
   if (myRide) leaveRideLocal();
   myHeld = null;
   const r = await client.mutation(api.players.join, { token: walletToken, fallback: spawnPoint(), at: { x: me.pos.x, z: me.pos.z, ry: me.yaw } });
-  if (r) myId = r.id;
+  if (r) {
+    myId = r.id;
+    myPos = r.pos;
+  }
 }
 
 // ---------------- chat ----------------
@@ -675,7 +699,7 @@ async function buy(id: string) {
   renderShop();
   try {
     // make sure the server has our position at the counter
-    await client.mutation(api.players.update, { id: myId, x: me.pos.x, y: me.pos.y, z: me.pos.z, ry: me.yaw, anim: me.pose });
+    if (myPos) await client.mutation(api.players.update, { pos: myPos, x: me.pos.x, y: me.pos.y, z: me.pos.z, ry: me.yaw, anim: me.pose });
     const r = await client.mutation(api.shop.buy, { id: myId, token: walletToken, cart: c.id, item: id });
     if (r.ok) {
       wallet = { balance: r.balance, cycleStart: r.cycleStart };
@@ -967,7 +991,16 @@ function startSession(c: ConvexClient) {
     renderWallet();
     if (shopCart && !buyPending) renderShop();
   });
-  c.onUpdate(api.players.list, {}, (list) => syncRemotes(list as PlayerDoc[]));
+  // who (re-runs on join / board / buy...) and where (re-runs on every position update), kept
+  // apart so the hot query reads only small rows
+  c.onUpdate(api.players.list, {}, (list) => {
+    roster = list as RosterDoc[];
+    syncRemotes(mergedPlayers());
+  });
+  c.onUpdate(api.players.positions, {}, (list) => {
+    posByPlayer = new Map(list.map((q) => [q.p, q]));
+    syncRemotes(mergedPlayers());
+  });
   c.onUpdate(api.chat.recent, {}, (msgs) => {
     const now = serverNow();
     for (const m of msgs) {
@@ -997,6 +1030,7 @@ async function enter() {
   if (!r) return false;
   wallet = await c.mutation(api.shop.open, { token: walletToken });
   myId = r.id;
+  myPos = r.pos;
   myName = r.name;
   myColor = r.color;
   myLook = r.look as Look;
@@ -1303,7 +1337,7 @@ function frame() {
         myAvatar.setFirstPerson(camMode === "fp");
       }
       const ns = def.netState?.();
-      if (ns) netTick(ns.pos, ns.ry, ns.anim);
+      if (ns) netTick(ns.pos, ns.ry, ns.anim, false, DRIVE_SEND_MS);
       else netTick(sendPos.copy(tmpPos), me.yaw, def.pose(0), true);
 
       if (def.hud) def.hud(res, dt);

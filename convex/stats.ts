@@ -79,12 +79,13 @@ async function peakOnline(ctx: QueryCtx, day: string) {
 
 async function onlineNow(ctx: QueryCtx) {
   const now = Date.now();
-  const live = await ctx.db
-    .query("players")
-    .withIndex("by_lastSeen", (q) => q.gt("lastSeen", now - ONLINE_MS))
-    .take(500);
+  const live = (await ctx.db.query("positions").take(1000)).filter((q) => now - q.lastSeen < ONLINE_MS);
   const riding: Record<string, number> = {};
-  for (const p of live) if (p.ride) bump(riding, p.ride.kind);
+  for (const q of live) {
+    if (!q.riding) continue;
+    const p = await ctx.db.get(q.player);
+    if (p?.ride) bump(riding, p.ride.kind);
+  }
   return { online: live.length, riding };
 }
 

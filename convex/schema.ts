@@ -14,27 +14,40 @@ export const spotValidator = v.object({ x: v.number(), z: v.number(), ry: v.numb
 export const heldValidator = v.object({ item: v.string(), left: v.number() });
 
 export default defineSchema({
+  /**
+   * Someone in the park right now: who they are and what they're doing. Changes rarely (join,
+   * board, buy...). Where they are lives in `positions`, which takes the 110 ms updates.
+   */
   players: defineTable({
     name: v.string(),
     color: v.string(),
-    x: v.number(),
-    y: v.number(),
-    z: v.number(),
-    ry: v.number(),
-    anim: v.string(),
     ride: v.optional(v.union(rideValidator, v.null())),
     /** Food/drink/balloon in hand (server-authoritative: set by shop.buy, consumed by shop.use). */
     held: v.optional(v.union(heldValidator, v.null())),
     look: v.optional(lookValidator),
     /** Saved profile this row plays as (rows are temporary, profiles are not). */
     profile: v.optional(v.id("profiles")),
-    /** Last spot on foot; x/y/z follow the seat while riding. Copied into the profile on leave. */
+    /** Where they stood when they last boarded / got off a ride (positions follow the seat). */
     spot: v.optional(spotValidator),
-    lastSeen: v.number(),
   })
-    .index("by_lastSeen", ["lastSeen"])
     .index("by_profile", ["profile"])
     .index("by_ride_key", ["ride.key"]),
+  /**
+   * One small row per player: the hot path. players.update writes only this, and players.positions
+   * (re-run after every write, for everyone) reads only these, so keep it to a few numbers.
+   * No index on lastSeen on purpose: it would be rewritten on every update.
+   */
+  positions: defineTable({
+    player: v.id("players"),
+    x: v.number(),
+    y: v.number(),
+    z: v.number(),
+    ry: v.number(),
+    anim: v.string(),
+    lastSeen: v.number(),
+    /** On a ride: x/y/z follow the seat, so they aren't the player's spot on foot. */
+    riding: v.boolean(),
+  }).index("by_player", ["player"]),
   /** One per device (same random token as the wallet): name, look and where they left the park. */
   profiles: defineTable({
     token: v.string(),

@@ -44,14 +44,15 @@ World layout (metres; +z = south, entrance gate at z≈99): plaza (0,0); coaster
 ## Conventions
 - UI strings in Vietnamese, sprites via `{token}`, no emoji. Keep the HUD minimal while riding (`body.riding`).
 - Touch must work (left-half joystick, right-half look, buttons in `#mobileBtns`). Test both if UI changes.
-- Shared state goes through Convex mutations; positions stream via `players.update` about every 110 ms while moving, a 5 s heartbeat otherwise. Every `players` write re-runs `players.list` for all clients, so keep those writes rare: riders on clock-driven rides only heartbeat (`netTick(..., clockDriven)`).
+- Shared state goes through Convex mutations. Positions live in their own small `positions` table: `players.update` (every 150 ms while walking, 110 ms in bumper cars, else a 5 s heartbeat) writes only that row, and every write re-runs `players.positions` for all clients, so keep those rows small and the writes rare (riders on clock-driven rides only heartbeat: `netTick(..., clockDriven)`). `players` holds who/what (name, look, ride, held) and feeds `players.list`; the client merges the two (`mergedPlayers`). Never add a lastSeen index to `positions` (rewritten on every update).
+- Free plan is 1 GB Database I/O a month shared by dev and prod: tests and promo bots run on a local backend (see Testing).
 
 ## Testing
 - `npm run typecheck`, `npm run build`.
-- `npm run e2e`: starts its own Vite server and headless Chromium (software GL, `?lowgfx`), joins a player, boards every ride, plays darts, buys a snack; fails on any page error. Takes about a minute. `npm run e2e -- drop bumper` runs only some. Screenshots land in `e2e/out/` (look at them).
-- `npm run e2e:bumper`: two players ram each other.
+- `npm run e2e`: starts a **local Convex backend** (`e2e/convex-local.mjs`: anonymous local `convex dev` in `../.convex-local-<checkout>/`, free, never touches `.env.local`; `E2E_CLOUD=1` uses the dev cloud instead), its own Vite server pointed at it, and headless Chromium (software GL, `?lowgfx`), joins a player, boards every ride, plays darts, buys a snack; fails on any page error. Takes about a minute. `npm run e2e -- drop bumper` runs only some. Screenshots land in `e2e/out/` (look at them).
+- `npm run e2e:bumper`: two players ram each other. `npm run e2e:ride-sync`: a remote rider on a clock-driven ride is placed right while only heartbeating.
 - Dev-only hooks on `window.__game`: `tp(x,z)`, `interact()`, `warp(sec)` (fast-forward the local ride clock), `nextBoarding(kind)`, `setCam`, `rides` (Map of RideDefs), world objects (`coaster`, `tower`, `bumpers`…), `openShop`, `buy`, `cartFront(i)`, `mode`, `ride`, `held`, `wallet`.
-- Local dev and e2e use `.env.local`, which points to the **dev** Convex deployment. Test players never touch prod.
+- Local dev (`npm run dev`) uses `.env.local`, which points to the **dev** cloud deployment; e2e and promo capture use the local backend. Test players never touch prod.
 - Write new checks in `e2e/` with `lib.mjs` (`player`, `until`, `check`, `shot`, `finish`).
 
 ## Deploy

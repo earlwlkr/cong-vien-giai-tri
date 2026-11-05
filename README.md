@@ -44,9 +44,10 @@ npm run dev
 npm run typecheck
 npm run e2e          # trình duyệt headless: đi hết các trò, ném phi tiêu, mua đồ ăn (~1 phút)
 npm run e2e:bumper   # 2 người chơi đụng xe nhau
+npm run e2e:ride-sync # người chơi khác thấy đúng vị trí khi đi bộ, khi ngồi vòng quay, sau khi tải lại
 ```
 
-Cần Chromium (`/usr/bin/chromium` hoặc biến `CHROMIUM`). Dùng Convex dev trong `.env.local`.
+Cần Chromium (`/usr/bin/chromium` hoặc biến `CHROMIUM`). Kiểm thử chạy trên một Convex backend local (miễn phí, không đụng `.env.local` hay quota cloud); `E2E_CLOUD=1` để dùng Convex dev trên cloud.
 
 ## Deploy
 

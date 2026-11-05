@@ -231,7 +231,7 @@ export const bots = {
       await convex.mutation(api.players.saveProfile, { token, name, color: COLORS[(i * 7) % COLORS.length], look });
       const p = place(k);
       const j = await convex.mutation(api.players.join, { token, fallback: { x: p.x, z: p.z }, at: { x: p.x, z: p.z, ry: p.ry ?? 0 } });
-      return { i, id: j.id, name, token, x: p.x, z: p.z, ry: p.ry ?? 0, anim: "idle", walk: null, ride: null, dirty: true };
+      return { i, id: j.id, pos: j.pos, name, token, x: p.x, z: p.z, ry: p.ry ?? 0, anim: "idle", walk: null, ride: null, dirty: true };
     }));
     this.list.push(...made);
     return made;
@@ -256,7 +256,7 @@ export const bots = {
       const moved = b.x !== b.sent?.x || b.z !== b.sent?.z || b.ry !== b.sent?.ry || b.anim !== b.sent?.anim;
       if (!moved && Date.now() - b.sent.at < BOT_HEARTBEAT_MS) return;
       b.sent = { x: b.x, z: b.z, ry: b.ry, anim: b.anim, at: Date.now() };
-      await convex.mutation(api.players.update, { id: b.id, x: b.x, y: 0, z: b.z, ry: b.ry, anim: b.anim });
+      await convex.mutation(api.players.update, { pos: b.pos, x: b.x, y: 0, z: b.z, ry: b.ry, anim: b.anim });
     })).catch((e) => console.log("bot update failed", e.message)).finally(() => (this.inflight = null));
   },
   /** Put a bot on a ride (clock-driven rides: the viewer places it from serverNow). */
