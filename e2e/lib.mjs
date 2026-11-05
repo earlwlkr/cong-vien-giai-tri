@@ -1,7 +1,7 @@
 // Shared helpers for the headless browser checks in e2e/. See CLAUDE.md ("Testing").
 // Starts its own Vite dev server (uses .env.local → the DEV Convex deployment), launches
 // headless Chromium with software GL, and joins players through the real join screen.
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -54,6 +54,12 @@ export async function player(url, name, opts = {}) {
   await page.waitForFunction(() => window.__game && !document.getElementById("ui").classList.contains("hidden"));
   const g = (expr) => page.evaluate(`(() => { const G = window.__game; return (${expr}); })()`);
   return { page, g, name };
+}
+
+/** Today's totals from convex/stats.ts on the DEV deployment (via the Convex CLI). */
+export function statsToday() {
+  const out = execFileSync("npx", ["convex", "run", "stats:summary", '{"days":1}'], { cwd: root, encoding: "utf8" });
+  return JSON.parse(out.slice(out.indexOf("{"))).days[0];
 }
 
 /** Polls `fn` until truthy (or throws after `ms`). */

@@ -27,8 +27,8 @@ Có góc nhìn thứ nhất / thứ ba, chat với bong bóng trên đầu nhân
 ## Công nghệ
 
 - [three.js](https://threejs.org) + [Vite](https://vite.dev) + TypeScript
-- [Convex](https://convex.dev) – hồ sơ người chơi (tên, nhân vật, vị trí cuối), vị trí người chơi, chat, bảng xếp hạng, đồng bộ thời gian
-- [Vercel](https://vercel.com) – hosting
+- [Convex](https://convex.dev) – hồ sơ người chơi (tên, nhân vật, vị trí cuối), vị trí người chơi, chat, bảng xếp hạng, đồng bộ thời gian, thống kê lượt chơi (`npm run stats`)
+- [Vercel](https://vercel.com) – hosting, Web Analytics
 
 ## Chạy local
 

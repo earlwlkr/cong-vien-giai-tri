@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { logEvent } from "./stats";
 
 const MAX_SCORE: Record<string, number> = { darts: 2000 };
 
@@ -13,6 +14,7 @@ export const submit = mutation({
     const score = Math.max(0, Math.min(max, Math.floor(a.score)));
     if (score <= 0) return;
     await ctx.db.insert("scores", { game: a.game, name: p.name, color: p.color, score });
+    await logEvent(ctx, { type: "darts", profile: p.profile });
   },
 });
 

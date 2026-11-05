@@ -1,15 +1,17 @@
 // One player walks the park: boards every ride (warping the clock past schedules), plays darts,
 // buys a snack. Fails on any page error or broken step. ~1–2 min.  npm run e2e
 // Only some rides:  npm run e2e -- drop bumper
-import { check, finish, launch, player, shot, startServer, until, wait } from "./lib.mjs";
+import { check, finish, launch, player, shot, startServer, statsToday, until, wait } from "./lib.mjs";
 
 const only = process.argv.slice(2);
 const url = await startServer();
 await launch();
+const stats0 = statsToday();
 const p = await player(url, "Kiểm tra");
 const { g, page } = p;
 
 const kinds = await g("[...G.rides.keys()]");
+const boardedKinds = [];
 for (const kind of kinds) {
   if (only.length && !only.includes(kind)) continue;
   const zone = await g(`G.rides.get(${JSON.stringify(kind)}).zone`);
@@ -23,6 +25,7 @@ for (const kind of kinds) {
   const boarded = await until(() => g("G.mode === 'ride' && G.ride?.kind"), 15000, `${kind} boarding`).catch(() => null);
   check(boarded === kind, `${kind}: boarded`);
   if (!boarded) continue;
+  boardedKinds.push(kind);
   if (kind === "bumper") {
     await page.keyboard.down("KeyW");
     await wait(1200);
@@ -50,6 +53,7 @@ if (!only.length || only.includes("darts")) {
   check(await g("G.mode === 'walk'"), "darts: Q quits");
 }
 
+let bought = false;
 if (!only.length || only.includes("shop")) {
   await g("(() => { const f = G.cartFront(0); G.tp(f.x, f.z); })()");
   await wait(400);
@@ -59,7 +63,17 @@ if (!only.length || only.includes("shop")) {
   await page.click("#shopItems button");
   check(await until(() => g("!!G.held"), 10000, "purchase").catch(() => false), "shop: buying puts the item in hand");
   check((await g("G.wallet?.balance")) < before, "shop: Xu deducted");
+  bought = true;
   await shot(p, "shop");
 }
+
+// analytics (convex/stats.ts): the visit, every boarding and the purchase were logged
+const after = statsToday();
+check(after.visits > stats0.visits, `stats: visit logged (${stats0.visits} → ${after.visits})`);
+for (const kind of boardedKinds) {
+  const [b, a] = [stats0.boards[kind] ?? 0, after.boards[kind] ?? 0];
+  check(a > b, `stats: ${kind} boarding logged (${b} → ${a})`);
+}
+if (bought) check(Object.values(after.buys).reduce((s, n) => s + n, 0) > Object.values(stats0.buys).reduce((s, n) => s + n, 0), "stats: purchase logged");
 
 await finish();

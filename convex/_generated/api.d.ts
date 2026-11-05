@@ -15,6 +15,7 @@ import type * as looks from "../looks.js";
 import type * as players from "../players.js";
 import type * as scores from "../scores.js";
 import type * as shop from "../shop.js";
+import type * as stats from "../stats.js";
 import type * as time from "../time.js";
 
 import type {
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   players: typeof players;
   scores: typeof scores;
   shop: typeof shop;
+  stats: typeof stats;
   time: typeof time;
 }>;
 

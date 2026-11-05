@@ -1,6 +1,7 @@
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { CARTS, XU_QUOTA, XU_REFILL_MS, cartFront, getItem } from "./catalog";
+import { logEvent } from "./stats";
 
 const validToken = (t: string) => /^[A-Za-z0-9-]{16,64}$/.test(t);
 
@@ -65,6 +66,7 @@ export const buy = mutation({
     balance -= item.price;
     await ctx.db.patch(w._id, { balance, cycleStart, lastBuy: now });
     await ctx.db.patch(a.id, { held: { item: a.item, left: item.bites }, lastSeen: now });
+    await logEvent(ctx, { type: "buy", kind: a.item, profile: p.profile });
     return { ok: true as const, balance, cycleStart };
   },
 });

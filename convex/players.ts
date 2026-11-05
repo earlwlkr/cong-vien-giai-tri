@@ -3,6 +3,7 @@ import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { lookValidator, spotValidator } from "./schema";
 import { cleanLook } from "./looks";
+import { dayOf, logEvent } from "./stats";
 
 const STALE_MS = 20_000;
 const validToken = (t: string) => /^[A-Za-z0-9-]{16,64}$/.test(t);
@@ -73,6 +74,10 @@ export const join = mutation({
       held: null,
       lastSeen: now,
     });
+    // Stats: a visit is a join that isn't a reconnect (`at`); the day's first one counts the player.
+    const first = prof.lastDay !== dayOf(now);
+    if (first) await ctx.db.patch(prof._id, { lastDay: dayOf(now) });
+    if (!a.at || first) await logEvent(ctx, { type: "join", profile: prof._id, first });
     return { id, name: prof.name, color: prof.color, look, ...pos, resumed: !a.at && !!spot };
   },
 });
@@ -85,6 +90,7 @@ export const saveProfile = mutation({
     const fields = { name: cleanName(a.name), color: cleanColor(a.color), look: cleanLook(a.look) };
     const prof = await ctx.db.query("profiles").withIndex("by_token", (q) => q.eq("token", a.token)).unique();
     const profId = prof ? (await ctx.db.patch(prof._id, fields), prof._id) : await ctx.db.insert("profiles", { token: a.token, ...fields });
+    if (!prof) await logEvent(ctx, { type: "new", profile: profId });
     if (a.id) {
       const p = await ctx.db.get(a.id);
       if (p && p.profile === profId) await ctx.db.patch(a.id, fields);
@@ -192,6 +198,7 @@ export const board = mutation({
     if (seat < 0) return null;
     const ride = { kind: a.kind.slice(0, 16), key: a.key.slice(0, 64), seat, start: a.start };
     await ctx.db.patch(a.id, { ride, lastSeen: now });
+    if (p.ride?.key !== ride.key) await logEvent(ctx, { type: "board", kind: ride.kind, profile: p.profile });
     return ride;
   },
 });

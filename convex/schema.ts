@@ -46,6 +46,8 @@ export default defineSchema({
     ry: v.optional(v.number()),
     /** lastSeen of the player row the position came from. */
     savedAt: v.optional(v.number()),
+    /** Park day (Vietnam time, "YYYY-MM-DD") of the last visit; marks the day's first join for stats. */
+    lastDay: v.optional(v.string()),
   }).index("by_token", ["token"]),
   messages: defineTable({
     playerId: v.id("players"),
@@ -61,6 +63,37 @@ export default defineSchema({
     cycleStart: v.number(),
     lastBuy: v.number(),
   }).index("by_token", ["token"]),
+  /**
+   * Analytics log, one row per action (see stats.ts): "join" (new visit; `first` = first of the
+   * day for this profile), "new" (profile created), "board" (kind = ride), "buy" (kind = item),
+   * "darts" (finished game). Rolled up into `daily` each night; raw rows kept EVENT_DAYS.
+   */
+  events: defineTable({
+    type: v.string(),
+    kind: v.optional(v.string()),
+    profile: v.optional(v.id("profiles")),
+    first: v.optional(v.boolean()),
+    at: v.number(),
+  }).index("by_at", ["at"]),
+  /** Every 5 minutes: who is in the park and on which ride. */
+  snapshots: defineTable({
+    at: v.number(),
+    online: v.number(),
+    riding: v.record(v.string(), v.number()),
+  }).index("by_at", ["at"]),
+  /** Per-day totals (Vietnam time) built from `events` + `snapshots` by the nightly rollup. */
+  daily: defineTable({
+    day: v.string(),
+    visits: v.number(),
+    players: v.number(),
+    newPlayers: v.number(),
+    boards: v.record(v.string(), v.number()),
+    buys: v.record(v.string(), v.number()),
+    darts: v.number(),
+    peakOnline: v.number(),
+    /** Rollup still paging through the day's events. */
+    partial: v.optional(v.boolean()),
+  }).index("by_day", ["day"]),
   scores: defineTable({
     game: v.string(),
     name: v.string(),
