@@ -323,7 +323,7 @@ window.addEventListener("pointerdown", (e) => {
 }, true);
 
 async function syncTime() {
-  if (!client) return;
+  if (!client || (import.meta.env.DEV && (window as any).__holdTime)) return;
   let best = Infinity;
   for (let i = 0; i < 4; i++) {
     const t0 = Date.now();
@@ -1114,6 +1114,8 @@ function collide(p: THREE.Vector3) {
 // ---------------- main loop ----------------
 const clock = new THREE.Clock();
 let frameNo = 0;
+/** DEV only (__game.cine): takes over the camera after the game has placed it (promo/trailer capture). */
+let cine: ((cam: THREE.PerspectiveCamera, now: number, t: number) => THREE.Vector3 | void) | null = null;
 const lookDir = new THREE.Vector3();
 const eye = new THREE.Vector3();
 const focus = new THREE.Vector3();
@@ -1384,6 +1386,11 @@ function frame() {
     if (frameNo % 30 === 0) drawMinimap();
   }
 
+  if (import.meta.env.DEV && cine) {
+    const f = cine(camera, now, t);
+    if (f) focus.copy(f);
+    camera.updateProjectionMatrix();
+  }
   // shadows follow the action
   focus.set(Math.round(focus.x / 2) * 2, 0, Math.round(focus.z / 2) * 2);
   sun.target.position.copy(focus);
@@ -1417,6 +1424,8 @@ if (import.meta.env.DEV) {
     warp(sec: number) { warpMs += sec * 1000; },
     /** Seconds until a scheduled ride (coaster, drop) next starts boarding. */
     nextBoarding(kind: string) { return rideOf(kind)?.schedule?.nextBoarding(serverNow()) ?? null; },
+    camera, scene, renderer,
+    set cine(f: typeof cine) { cine = f; },
     setCam(m: "fp" | "tp", yaw?: number, pitch?: number) { camMode = m; if (yaw !== undefined) { camYaw = yaw; rideLookYaw = 0; } if (pitch !== undefined) { camPitch = pitch; rideLookPitch = pitch; } },
   };
 }
