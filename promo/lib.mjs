@@ -1,26 +1,22 @@
 // Promo capture harness: renders the real game frame by frame on a fake clock, so videos come out a
-// smooth 30 fps even on software GL, and fills the park with scripted bot players on the DEV Convex
-// deployment. See promo/README.md.
+// smooth 30 fps even on software GL, and fills the park with scripted bot players on a local Convex
+// backend (e2e/convex-local.mjs; E2E_CLOUD=1 for the DEV cloud deployment). See promo/README.md.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api.js";
 import { startServer } from "../e2e/lib.mjs";
+import { startConvex } from "../e2e/convex-local.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const OUT = process.env.PROMO_OUT ?? path.join(root, "promo", "out");
 mkdirSync(OUT, { recursive: true });
 
-const env = Object.fromEntries(
-  readFileSync(path.join(root, ".env.local"), "utf8").split("\n").filter((l) => /^\w+=/.test(l)).map((l) => [l.split("=")[0], l.slice(l.indexOf("=") + 1).trim().replace(/^"|"$/g, "")]),
-);
-const CONVEX_URL = env.VITE_CONVEX_URL;
-if (!/dev|localhost|127\.0\.0\.1/.test(env.CONVEX_DEPLOYMENT ?? "") && !process.env.PROMO_ALLOW) {
-  throw new Error("promo capture only runs against the dev Convex deployment (.env.local CONVEX_DEPLOYMENT=dev:...)");
-}
+// the same backend startServer() points the game at (never prod: local, or .env.local's dev)
+const { url: CONVEX_URL } = await startConvex();
 export const convex = new ConvexHttpClient(CONVEX_URL);
 
 export const FPS = 30;
@@ -221,6 +217,7 @@ export const BOT_NAMES = ["Minh", "Lan", "Huy", "Thảo", "Bảo", "Ngọc", "Kh
  * Scripted players. Each bot has either a `walk(tSec)` -> {x, z, ry?, anim?} function, a fixed spot,
  * or a ride. Positions are sent on virtual time, so they line up with the recorded frames.
  */
+const BOT_HEARTBEAT_MS = 5000;
 export const bots = {
   list: [],
   vt: 0, // virtual seconds since bots were spawned
@@ -254,6 +251,11 @@ export const bots = {
         b.anim = s.anim ?? (Math.hypot(dx, dz) > 0.2 ? "walk" : "idle");
         b.x = s.x; b.z = s.z;
       }
+      // like the game client: only when something changed, else a heartbeat. Real time, not
+      // virtual: the server and the viewer drop players by the server clock (20 s).
+      const moved = b.x !== b.sent?.x || b.z !== b.sent?.z || b.ry !== b.sent?.ry || b.anim !== b.sent?.anim;
+      if (!moved && Date.now() - b.sent.at < BOT_HEARTBEAT_MS) return;
+      b.sent = { x: b.x, z: b.z, ry: b.ry, anim: b.anim, at: Date.now() };
       await convex.mutation(api.players.update, { id: b.id, x: b.x, y: 0, z: b.z, ry: b.ry, anim: b.anim });
     })).catch((e) => console.log("bot update failed", e.message)).finally(() => (this.inflight = null));
   },

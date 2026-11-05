@@ -1,9 +1,11 @@
 # Promo capture
 
-Renders trailer footage of the real game, frame by frame, on the **dev** Convex deployment.
+Renders trailer footage of the real game, frame by frame, against a **local** Convex backend
+(`e2e/convex-local.mjs`, free; `E2E_CLOUD=1` uses the dev cloud deployment).
 
 - `lib.mjs`: harness. Playwright's fake clock steps exactly one game frame per video frame
-  (1920×1080, 30 fps, smooth even on software GL), scripted bot players (`bots`) stream positions,
+  (1920×1080, 30 fps, smooth even on software GL), scripted bot players (`bots`) send positions
+  when they move (5 s real-time heartbeat otherwise),
   board rides and chat on the same virtual clock, and in-page camera helpers (`__cam.path`, `orbit`,
   `follow`, `track`) drive the DEV-only `__game.cine` hook in `src/main.ts`.
 - `shots.mjs`: the shot list. Writes `out/<shot>.mp4` plus PNG stills.

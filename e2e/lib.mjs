@@ -1,11 +1,13 @@
 // Shared helpers for the headless browser checks in e2e/. See CLAUDE.md ("Testing").
-// Starts its own Vite dev server (uses .env.local → the DEV Convex deployment), launches
-// headless Chromium with software GL, and joins players through the real join screen.
-import { execFileSync, spawn } from "node:child_process";
+// Starts a local Convex backend (convex-local.mjs; E2E_CLOUD=1 for the DEV cloud deployment) and
+// its own Vite dev server pointed at it, launches headless Chromium with software GL, and joins
+// players through the real join screen.
+import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { chromium } from "playwright-core";
+import { convexRun, startConvex, stopConvex } from "./convex-local.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const OUT = path.join(root, "e2e", "out");
@@ -14,11 +16,21 @@ mkdirSync(OUT, { recursive: true });
 const errors = [];
 let server, browser;
 
-/** Vite dev server on a free-ish port; resolves with its URL. Reuse one with E2E_URL=http://127.0.0.1:5173/. */
+/**
+ * Local Convex + a Vite dev server on a free-ish port pointed at it; resolves with the game URL.
+ * Reuse a running server with E2E_URL=http://127.0.0.1:5173/ (it keeps whatever Convex it uses).
+ */
 export async function startServer() {
   if (process.env.E2E_URL) return process.env.E2E_URL;
+  const { url: convexUrl, local } = await startConvex();
+  console.log(`convex: ${local ? "local " : "DEV cloud "}${convexUrl}`);
   const port = 5300 + Math.floor(Math.random() * 400);
-  server = spawn("npx", ["vite", "--port", String(port), "--strictPort", "--host", "127.0.0.1"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+  // process env beats .env.local in Vite
+  server = spawn("npx", ["vite", "--port", String(port), "--strictPort", "--host", "127.0.0.1"], {
+    cwd: root,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, VITE_CONVEX_URL: convexUrl },
+  });
   await new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error("vite did not start")), 30000);
     server.stdout.on("data", (d) => String(d).includes("Local:") && (clearTimeout(t), resolve()));
@@ -56,10 +68,9 @@ export async function player(url, name, opts = {}) {
   return { page, g, name };
 }
 
-/** Today's totals from convex/stats.ts on the DEV deployment (via the Convex CLI). */
+/** Today's totals from convex/stats.ts on the backend the run uses (via the Convex CLI). */
 export function statsToday() {
-  const out = execFileSync("npx", ["convex", "run", "stats:summary", '{"days":1}'], { cwd: root, encoding: "utf8" });
-  return JSON.parse(out.slice(out.indexOf("{"))).days[0];
+  return convexRun("stats:summary", { days: 1 }).days[0];
 }
 
 /** Polls `fn` until truthy (or throws after `ms`). */
@@ -85,6 +96,7 @@ export function check(ok, msg) {
 export async function finish() {
   await browser?.close();
   server?.kill();
+  stopConvex();
   if (errors.length) {
     console.log("\n" + errors.join("\n"));
     process.exit(1);
@@ -97,5 +109,6 @@ process.on("unhandledRejection", async (e) => {
   console.error(e);
   await browser?.close();
   server?.kill();
+  stopConvex();
   process.exit(1);
 });
