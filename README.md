@@ -9,6 +9,9 @@ Dạo quanh công viên, trò chuyện với mọi người và chơi các trò 
 - 🎠 **Vòng ngựa gỗ** – có nhạc
 - 🗼 **Tháp rơi tự do** – 12 ghế, vừa lên vừa xoay, treo lơ lửng 45 m rồi rơi tự do 84 km/h, phanh từ 2.9 G; mọi người cùng một lượt theo giờ máy chủ
 - 🚗 **Xe điện đụng** – 8 xe, tự lái (W/S chạy, A/D lái, Space bóp còi), đụng nhau được với người chơi khác
+- 🏴‍☠️ **Thuyền hải tặc** – 16 ghế, lắc như con lắc tới 70°, lơ lửng trên đỉnh mỗi nhịp; cả thuyền nhổ neo theo lịch chung
+- 🪂 **Đu quay bay** – 16 ghế xích, tán dù vừa quay vừa nâng lên cao, ghế văng ra theo đúng góc lực ly tâm
+- ☕ **Tách trà xoay** – 6 tách trên bàn xoay, mỗi tách tự xoay nhanh chậm, ngồi chung 4 người
 - 🎯 **Ném phi tiêu** – 45 giây, bảng xếp hạng chung
 
 Lần đầu vào, bạn đặt tên và tự chọn nhân vật (kiểu tóc/mũ, màu da, tóc, áo, giày). Tên, nhân vật và chỗ bạn rời công viên được lưu theo thiết bị: lần sau mở game là vào thẳng đúng chỗ cũ, không cần chọn lại. Bấm nút bút chì ở góc trên để đổi tên hoặc nhân vật.

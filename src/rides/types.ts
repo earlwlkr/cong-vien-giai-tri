@@ -19,6 +19,10 @@ export type RideResult = {
   height?: number;
   left?: number;
   phase?: string;
+  /** Swing / lean angle (rad), e.g. the pirate ship's swing. */
+  angle?: number;
+  /** Spin rate in turns per minute. */
+  rpm?: number;
 };
 
 /** Another player as this client sees them. */

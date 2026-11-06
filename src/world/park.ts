@@ -13,6 +13,9 @@ export const PATHS: Path[] = [
   { pts: [[-19, 5], [-48, 24]], w: 5 },
   { pts: [[0, -19], [0, -33]], w: 5 }, // drop tower
   { pts: [[4, 52], [38.5, 52]], w: 5 }, // bumper cars
+  { pts: [[-4, 78], [-66, 78]], w: 5 }, // pirate ship
+  { pts: [[-4, 54], [-33, 54]], w: 5 }, // swing ride
+  { pts: [[4, 78], [90, 78]], w: 5 }, // teacups
 ];
 export const PLAZA_R = 20;
 
@@ -257,6 +260,9 @@ export function buildPark(scene: THREE.Scene, blocked: (x: number, z: number) =>
     { path: 4, title: "NÉM PHI TIÊU", bg: "#3a86ff", sub: "{target} Bắn bóng bay · Lên bảng vàng" },
     { path: 5, title: "THÁP RƠI TỰ DO", bg: "#3a0ca3", sub: "{tower} Cao 45m · Rơi tự do 84 km/h" },
     { path: 6, title: "XE ĐIỆN ĐỤNG", bg: "#e63946", sub: "{bumper} Tự lái · Đụng thoải mái" },
+    { path: 7, title: "THUYỀN HẢI TẶC", bg: "#5c2e1a", sub: "{ship} Lắc 70° · Lơ lửng trên đỉnh sóng" },
+    { path: 8, title: "ĐU QUAY BAY", bg: "#8338ec", sub: "{swing} 16 ghế xích · Bay vòng trên cao" },
+    { path: 9, title: "TÁCH TRÀ XOAY", bg: "#ff4e7a", sub: "{teacup} Xoay tít · Ngồi chung 4 người" },
   ];
   const archPostGeo = new THREE.CylinderGeometry(0.14, 0.16, 5.6, 10);
   const archPostMat = std("#ffffff");

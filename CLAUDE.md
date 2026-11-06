@@ -9,7 +9,7 @@ Vietnamese.
 | Path | What |
 |---|---|
 | `src/main.ts` | Game shell: renderer, networking (Convex), join/profile, chat, HUD, shop, darts, walking, camera, the main loop. Ride-agnostic. |
-| `src/rides/` | **One file per ride** (`coaster.ts`, `wheel.ts`, `carousel.ts`, `drop.ts`, `bumper.ts`) implementing `RideDef` from `types.ts`; registered in `index.ts`. |
+| `src/rides/` | **One file per ride** (`coaster.ts`, `wheel.ts`, `carousel.ts`, `drop.ts`, `bumper.ts`, `ship.ts`, `swing.ts`, `teacup.ts`) implementing `RideDef` from `types.ts`; registered in `index.ts`. |
 | `src/world/` | 3D builders/physics: `park.ts` (ground, `PATHS`, ride arch signs, trees, fence), one class per ride, `darts.ts`, `vendors.ts` (food carts + sellers). |
 | `src/avatar.ts`, `src/maker.ts` | Chibi player model + poses; character picker. |
 | `src/sprites.ts` | 16×16 pixel sprites. Use `{name}` tokens in UI strings (`setRich`, `makeSign`, `toast`); **never emoji**. |
@@ -17,12 +17,12 @@ Vietnamese.
 | `convex/` | `players.ts` (join/profile/position/`board`/`unboard`), `shop.ts` + `catalog.ts` (Xu wallet, carts, items), `chat.ts`, `scores.ts`, `stats.ts` (analytics), `crons.ts`, `schema.ts`. |
 | `e2e/` | Headless browser checks (see Testing). |
 
-World layout (metres; +z = south, entrance gate at z≈99): plaza (0,0); coaster NW (-100,-100…33,-54); Ferris wheel (70,-70); carousel (58,18); darts (-52,16); drop tower (0,-40); bumper cars (54,52); food carts along the avenue x=±8.5, z 40–64. Free space: south-west lawn (x -120…-20, z 30…95), east (x 90…125, z -40…95).
+World layout (metres; +z = south, entrance gate at z≈99): plaza (0,0); coaster NW (-100,-100…33,-54); Ferris wheel (70,-70); carousel (58,18); darts (-52,16); drop tower (0,-40); bumper cars (54,52); swing ride (-50,54); pirate ship (-76,78); teacups (100,78); food carts along the avenue x=±8.5, z 40–64. Free space: south-west corner (x -120…-90, z 30…95), west lawn (x -120…-66, z 30…58), east (x 90…125, z -40…62).
 
 ## How rides work
 
-- Clock-driven rides (`coaster`, `wheel`, `carousel`, `drop`) are pure functions of `serverNow()`, so every client sees the same thing with no ride state on the server. A rider's seat is just `players.ride = { kind, key, seat, start }`; `seatPose(ride, now)` places anyone.
-- Scheduled rides (`schedule` in `RideDef`: coaster, drop) get the shared queue / auto-board logic for free.
+- Clock-driven rides (`coaster`, `wheel`, `carousel`, `drop`, `ship`, `swing`, `teacup`) are pure functions of `serverNow()`, so every client sees the same thing with no ride state on the server. A rider's seat is just `players.ride = { kind, key, seat, start }`; `seatPose(ride, now)` places anyone.
+- Scheduled rides (`schedule` in `RideDef`: coaster, drop, ship, swing) get the shared queue / auto-board logic for free.
 - Driven rides (`bumper`) implement `drive` (local physics), `netState` (what to stream), `follow` (place remote riders).
 - `players.board` only enforces unique `(key, seat)`; it trusts the client for the rest.
 
