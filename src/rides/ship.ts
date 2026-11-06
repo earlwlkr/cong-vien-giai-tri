@@ -3,7 +3,7 @@ import type { RideDef, RideEnv } from "./types";
 
 const SCREAMS = ["Uiii!", "Aaaa!", "Á á á!", "Yeee!"];
 
-export function shipRide(env: RideEnv, ship = new PirateShip(-76, 78)): RideDef {
+export function shipRide(env: RideEnv, ship = new PirateShip(-64, -24)): RideDef {
   const c = ship.center;
   const E = env.isTouch ? "" : " (E)";
   let lastPhase = "", lastAngle = 0, peakCool = 0;

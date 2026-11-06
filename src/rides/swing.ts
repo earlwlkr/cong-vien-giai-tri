@@ -1,7 +1,7 @@
 import { SwingRide } from "../world/swings";
 import type { RideDef, RideEnv } from "./types";
 
-export function swingRide(env: RideEnv, swings = new SwingRide(-50, 54)): RideDef {
+export function swingRide(env: RideEnv, swings = new SwingRide(70, -34)): RideDef {
   const c = swings.center;
   const E = env.isTouch ? "" : " (E)";
   let lastPhase = "";

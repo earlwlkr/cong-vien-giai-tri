@@ -26,9 +26,9 @@ export function buildRides(env: RideEnv) {
     carousel: new Carousel(58, 18),
     tower: new DropTower(0, -40),
     bumpers: new BumperCars(54, 52),
-    ship: new PirateShip(-76, 78),
-    swings: new SwingRide(-50, 54),
-    teacups: new Teacups(100, 78),
+    ship: new PirateShip(-64, -24),
+    swings: new SwingRide(70, -34),
+    teacups: new Teacups(-33, 49),
   };
   const list: RideDef[] = [
     coasterRide(env, world.coaster),

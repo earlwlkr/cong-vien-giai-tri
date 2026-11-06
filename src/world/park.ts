@@ -13,9 +13,9 @@ export const PATHS: Path[] = [
   { pts: [[-19, 5], [-48, 24]], w: 5 },
   { pts: [[0, -19], [0, -33]], w: 5 }, // drop tower
   { pts: [[4, 52], [38.5, 52]], w: 5 }, // bumper cars
-  { pts: [[-4, 78], [-66, 78]], w: 5 }, // pirate ship
-  { pts: [[-4, 54], [-33, 54]], w: 5 }, // swing ride
-  { pts: [[4, 78], [90, 78]], w: 5 }, // teacups
+  { pts: [[-18.35, -7.95], [-53, -24]], w: 5 }, // pirate ship
+  { pts: [[18, -8.73], [56, -27.2]], w: 5 }, // swing ride
+  { pts: [[-11.17, 16.59], [-26.6, 39.5]], w: 5 }, // teacups
 ];
 export const PLAZA_R = 20;
 
@@ -350,11 +350,14 @@ export function buildPark(scene: THREE.Scene, blocked: (x: number, z: number) =>
 
   // benches around the plaza
   const benchMat = std("#a0522d");
+  /** Angles where paths leave the plaza. */
+  const mouths = PATHS.map((p) => p.pts[0]).filter(([x, z]) => Math.abs(Math.hypot(x, z) - PLAZA_R) < 2).map(([x, z]) => Math.atan2(z, x));
   for (let a = 0; a < 8; a++) {
     const ang = (a / 8) * Math.PI * 2 + Math.PI / 8;
     const r = PLAZA_R - 2.5;
     const x = Math.cos(ang) * r, z = Math.sin(ang) * r;
     if (Math.abs(x) < 6 && z > 0) continue;
+    if (mouths.some((m) => Math.abs(Math.atan2(Math.sin(m - ang), Math.cos(m - ang))) < 0.3)) continue; // keep path mouths clear
     const b = new THREE.Group();
     const seat = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 0.6), benchMat);
     seat.position.y = 0.48;

@@ -17,7 +17,7 @@ Vietnamese.
 | `convex/` | `players.ts` (join/profile/position/`board`/`unboard`), `shop.ts` + `catalog.ts` (Xu wallet, carts, items), `chat.ts`, `scores.ts`, `stats.ts` (analytics), `crons.ts`, `schema.ts`. |
 | `e2e/` | Headless browser checks (see Testing). |
 
-World layout (metres; +z = south, entrance gate at z≈99): plaza (0,0); coaster NW (-100,-100…33,-54); Ferris wheel (70,-70); carousel (58,18); darts (-52,16); drop tower (0,-40); bumper cars (54,52); swing ride (-50,54); pirate ship (-76,78); teacups (100,78); food carts along the avenue x=±8.5, z 40–64. Free space: south-west corner (x -120…-90, z 30…95), west lawn (x -120…-66, z 30…58), east (x 90…125, z -40…62).
+World layout (metres; +z = south, entrance gate at z≈99): hub and spokes. Plaza (0,0) with every ride on a short path off it, thrill rides north, family rides south by the entrance. Coaster NW (track x -121…33, z -100…-52, station -92,-96); pirate ship WNW (-64,-24); drop tower N (0,-40); Ferris wheel NE (70,-70); swing ride ENE (70,-34, gate faces the plaza); carousel E (58,18); darts W (-52,16); teacups SW (-33,49); bumper cars SE (54,52, off the avenue); food carts along the avenue x=±8.5, z 40–64. Free space: south-west (x -120…-50, z 30…95), south-east (x 75…125, z 0…95), west (x -120…-75, z -45…5). New ride: give it its own plaza spoke (`PATHS` entry starting on the plaza edge, r=20) between existing ones; benches and lamps clear path mouths automatically.
 
 ## How rides work
 

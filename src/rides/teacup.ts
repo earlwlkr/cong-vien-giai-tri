@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { Teacups } from "../world/teacups";
 import type { RideDef, RideEnv } from "./types";
 
-export function teacupRide(env: RideEnv, cups = new Teacups(100, 78)): RideDef {
+export function teacupRide(env: RideEnv, cups = new Teacups(-33, 49)): RideDef {
   const c = cups.center;
   return {
     kind: "teacup",

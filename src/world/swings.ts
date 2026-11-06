@@ -56,13 +56,17 @@ export class SwingRide {
   private canopy = new THREE.Group();
   private chairs: THREE.Group[] = [];
   private bulbs!: THREE.InstancedMesh;
+  /** World angle (x→z) of the entrance gate. */
+  private gate: number;
 
-  constructor(x: number, z: number) {
+  /** The entrance faces the plaza (the origin) unless `gate` says otherwise. */
+  constructor(x: number, z: number, gate = Math.atan2(-z, -x)) {
+    this.gate = gate;
     this.center = new THREE.Vector3(x, 0, z);
     this.group.position.copy(this.center);
-    // entrance gate on the east side (+x), facing the path
-    this.boardZone = new THREE.Vector3(x + 14.2, 0, z);
-    this.exitPoint = new THREE.Vector3(x + 15, 0, z + 2.4);
+    const gx = Math.cos(gate), gz = Math.sin(gate);
+    this.boardZone = new THREE.Vector3(x + gx * 14.2, 0, z + gz * 14.2);
+    this.exitPoint = new THREE.Vector3(x + gx * 15 - gz * 2.4, 0, z + gz * 15 + gx * 2.4);
     this.colliders.push({ x, z, r: 12.4 });
     this.build();
   }
@@ -259,7 +263,7 @@ export class SwingRide {
     const railMat = std("#ffffff");
     const postGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.1, 6);
     const n = 44, R = 12.6;
-    const gap = (a: number) => Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < 0.16;
+    const gap = (a: number) => Math.abs(Math.atan2(Math.sin(a - this.gate), Math.cos(a - this.gate))) < 0.16;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2, a2 = ((i + 1) / n) * Math.PI * 2;
       if (gap(a)) continue;
