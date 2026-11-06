@@ -200,7 +200,7 @@ export class SwingRide {
     for (let i = 0; i < N; i++) {
       const sp = new THREE.Mesh(spokeGeo, white);
       sp.rotation.y = -(i * Math.PI * 2) / N;
-      sp.position.y = -0.2;
+      sp.position.y = 0;
       this.canopy.add(sp);
     }
     const nb = 48;
@@ -219,8 +219,11 @@ export class SwingRide {
     const chairCols = ["#ff4e7a", "#ffd166", "#2ec4b6", "#3a86ff"];
     const panGeo = new THREE.BoxGeometry(0.6, 0.08, 0.55);
     const backGeo = new THREE.BoxGeometry(0.6, 0.7, 0.08);
-    const chainGeo = new THREE.CylinderGeometry(0.025, 0.025, L - 0.2, 4);
-    const barGeo = new THREE.BoxGeometry(0.6, 0.05, 0.05);
+    // chains run from the seat pan's front corners all the way up to the canopy rim (local y = L)
+    const CH_X = 0.32, CH_Z = 0.12, CH_Y0 = -0.12;
+    const chainGeo = new THREE.CylinderGeometry(0.025, 0.025, L - CH_Y0, 4);
+    const armGeo = new THREE.BoxGeometry(0.05, 0.05, 0.62);
+    const barGeo = new THREE.BoxGeometry(2 * CH_X + 0.05, 0.05, 0.05);
     for (let i = 0; i < N; i++) {
       const c = new THREE.Group();
       const mat = std(chairCols[i % chairCols.length]);
@@ -228,14 +231,18 @@ export class SwingRide {
       pan.position.set(0, -0.12, 0.05);
       const back = new THREE.Mesh(backGeo, mat);
       back.position.set(0, 0.22, -0.26);
+      c.add(pan, back);
+      // armrests from the backrest forward, crossing the chains, holding the safety bar
+      for (const sx of [-CH_X, CH_X]) {
+        const arm = new THREE.Mesh(armGeo, gold);
+        arm.position.set(sx, 0.25, 0.02);
+        const ch = new THREE.Mesh(chainGeo, white);
+        ch.position.set(sx, (L + CH_Y0) / 2, CH_Z);
+        c.add(arm, ch);
+      }
       const bar = new THREE.Mesh(barGeo, gold);
       bar.position.set(0, 0.25, 0.32);
-      c.add(pan, back, bar);
-      for (const sx of [-0.3, 0.3]) {
-        const ch = new THREE.Mesh(chainGeo, white);
-        ch.position.set(sx, (L + 0.2) / 2, 0);
-        c.add(ch);
-      }
+      c.add(bar);
       c.traverse((o) => ((o as THREE.Mesh).isMesh && (o.castShadow = true)));
       this.group.add(c);
       this.chairs.push(c);

@@ -237,11 +237,11 @@ export class PirateShip {
       const face = z > 0 ? -1 : 1; // riders face the middle
       const floor = new THREE.Mesh(new THREE.BoxGeometry(2 * HALF_W, 0.16, 3.0), woodDark);
       floor.position.set(0, deckY(z) - 0.08 - 0.05, z);
-      const bench = new THREE.Mesh(new THREE.BoxGeometry(2 * HALF_W - 0.2, 0.14, 0.6), std(benchCols[r]));
+      const bench = new THREE.Mesh(new THREE.BoxGeometry(2 * HALF_W, 0.14, 0.6), std(benchCols[r]));
       bench.position.set(0, deckY(z) + 0.48, z - face * 0.05);
-      const back = new THREE.Mesh(new THREE.BoxGeometry(2 * HALF_W - 0.2, 0.9, 0.12), std(benchCols[r]));
+      const back = new THREE.Mesh(new THREE.BoxGeometry(2 * HALF_W, 0.9, 0.12), std(benchCols[r]));
       back.position.set(0, deckY(z) + 0.95, z - face * 0.42);
-      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2 * HALF_W - 0.3, 6), trim);
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2 * HALF_W, 6), trim);
       bar.rotation.z = Math.PI / 2;
       bar.position.set(0, deckY(z) + 0.85, z + face * 0.5);
       this.boat.add(floor, bench, back, bar);
@@ -249,20 +249,49 @@ export class PirateShip {
     const mid = new THREE.Mesh(new THREE.BoxGeometry(2 * HALF_W, 0.16, 1.6), woodDark);
     mid.position.set(0, deckY(0) - 0.13, 0);
     this.boat.add(mid);
-    // bow & stern posts with a dragon-ish figurehead at the bow
-    const postGeo = new THREE.CylinderGeometry(0.22, 0.32, 3.2, 8);
+    // bow & stern: close the hull ends, then a stem post on each with a dragon head at the bow
+    const zEndTop = HALF_LEN, zEndBot = HALF_LEN * 0.96;
+    const yEndTop = topY(HALF_LEN), yEndBot = botY(HALF_LEN);
+    const endH = Math.hypot(yEndTop - yEndBot, zEndTop - zEndBot);
+    const endGeo = new THREE.BoxGeometry(2 * HALF_W + 0.36, endH, 0.22);
+    const POST_LEN = 3.2, POST_TILT = 0.35;
+    const postGeo = new THREE.CylinderGeometry(0.2, 0.3, POST_LEN, 8);
     for (const sz of [-1, 1]) {
+      const end = new THREE.Mesh(endGeo, wood);
+      end.position.set(0, (yEndTop + yEndBot) / 2, (sz * (zEndTop + zEndBot)) / 2 - sz * 0.11);
+      end.rotation.x = sz * Math.atan2(zEndTop - zEndBot, yEndTop - yEndBot);
+      this.boat.add(end);
+      // stem post: its foot sits inside the hull end, its top leans outward
+      const foot = new THREE.Vector3(0, yEndTop - 0.6, sz * (HALF_LEN - 0.25));
+      const dir = new THREE.Vector3(0, Math.cos(POST_TILT), sz * Math.sin(POST_TILT));
       const post = new THREE.Mesh(postGeo, woodDark);
-      post.position.set(0, topY(HALF_LEN) + 0.6, sz * (HALF_LEN - 0.2));
-      post.rotation.x = sz * 0.35;
+      post.position.copy(foot).addScaledVector(dir, POST_LEN / 2);
+      post.quaternion.setFromUnitVectors(Y, dir);
       this.boat.add(post);
+      const top = foot.clone().addScaledVector(dir, POST_LEN);
+      if (sz > 0) {
+        const green = std("#2a9d55");
+        const skull = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), green);
+        skull.position.copy(top);
+        const snout = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.9, 8), green);
+        snout.rotation.x = Math.PI / 2; // points +z (forward)
+        snout.position.copy(top).add(new THREE.Vector3(0, -0.05, 0.6));
+        const hornGeo = new THREE.ConeGeometry(0.09, 0.4, 6);
+        this.boat.add(skull, snout);
+        for (const ex of [-0.22, 0.22]) {
+          const eye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), std("#ffd166"));
+          eye.position.copy(top).add(new THREE.Vector3(ex, 0.14, 0.32));
+          const horn = new THREE.Mesh(hornGeo, std("#ffd166"));
+          horn.position.copy(top).add(new THREE.Vector3(ex, 0.45, -0.12));
+          horn.rotation.x = -0.4;
+          this.boat.add(eye, horn);
+        }
+      } else {
+        const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), trim);
+        lantern.position.copy(top);
+        this.boat.add(lantern);
+      }
     }
-    const head = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.4, 8), std("#2a9d55"));
-    head.position.set(0, topY(HALF_LEN) + 2.2, HALF_LEN + 0.5);
-    head.rotation.x = Math.PI / 2 + 0.4;
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), std("#ffd166"));
-    eye.position.set(0, topY(HALF_LEN) + 2.35, HALF_LEN + 0.25);
-    this.boat.add(head, eye);
     // arms from the pivot down to the hull
     const armGeo = new THREE.BoxGeometry(0.35, 1, 0.35);
     armGeo.translate(0, -0.5, 0);
