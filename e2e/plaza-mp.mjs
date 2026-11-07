@@ -1,6 +1,6 @@
 // Two players at the plaza. Both sit on the same bench (different seats); B must see A seated on
 // it from the seat claim alone. A waves (streamed as an anim flag) and tosses a coin into the
-// fountain: B must see the wave and get the coin. Shots of the water show from across the plaza.
+// fountain: B must see the wave, A's reactions and get the coin. Shots of the water show from across the plaza.
 // npm run e2e:plaza
 import { check, finish, launch, player, shot, startServer, until, wait } from "./lib.mjs";
 
@@ -40,6 +40,23 @@ check(await until(() => b.g(`${remoteA}?.anim.endsWith("+w")`), 6000, "wave").ca
 await b.g("G.setCam('tp', G.benches.list[" + bench + "].ry + Math.PI * 0.75, -0.25)");
 await wait(300);
 await shot(b, "plaza-bench-wave");
+
+// A opens the reaction bar (R) and sends a heart (1) then a haha (3): B sees both float over A
+await a.page.keyboard.press("KeyR");
+check(await a.g("!document.getElementById('reactBar').classList.contains('hidden')"), "A: R opens the reaction bar");
+await wait(400);
+await shot(a, "plaza-react-bar");
+await a.page.keyboard.press("Digit1");
+check(await until(() => b.g(`${remoteA}?.anim.includes("+r0")`), 6000, "heart").catch(() => false), "B: gets A's heart");
+await wait(400);
+await a.page.keyboard.press("Digit3");
+check(await until(() => b.g(`${remoteA}?.anim.includes("+r2")`), 6000, "haha").catch(() => false), "B: gets A's haha");
+check((await b.g(`${remoteA}.avatar.reacting`)) >= 1, "B: a reaction floats over A");
+await wait(250);
+await shot(b, "plaza-react");
+check(await until(() => b.g(`!${remoteA}?.anim.includes("+r")`), 6000, "react clears").catch(() => false), "B: the reaction flag clears");
+await a.page.keyboard.press("KeyR");
+check(await a.g("document.getElementById('reactBar').classList.contains('hidden')"), "A: R closes the reaction bar");
 
 // A stands up and tosses a coin; B gets it
 await a.page.keyboard.press("KeyQ");

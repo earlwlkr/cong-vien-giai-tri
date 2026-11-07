@@ -60,6 +60,20 @@ kbd { background: #eef1f6; border-radius: 4px; padding: 0 4px; border: 1px solid
 .msg.sys { color: #ffe08a; font-style: italic; }
 #chatInput { width: 100%; margin-top: 6px; padding: 10px 12px; border-radius: 12px; border: 0; background: rgba(255,255,255,.95); color: #123; font-size: 16px; outline: none; }
 
+#reactBar { position: absolute; left: 50%; bottom: calc(64px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; gap: 6px; padding: 6px 8px; border-radius: 999px; background: rgba(20,30,60,.6); backdrop-filter: blur(6px); box-shadow: 0 4px 14px rgba(0,0,0,.3); pointer-events: auto; animation: reactIn .15s ease-out; }
+#reactBar button { position: relative; width: 46px; height: 46px; border: 0; border-radius: 50%; background: transparent; cursor: pointer; padding: 0; }
+#reactBar button:hover { background: rgba(255,255,255,.15); transform: scale(1.12); }
+#reactBar button:active { transform: scale(.9); }
+#reactBar .spr { width: 32px; height: 32px; vertical-align: middle; }
+#reactBar kbd { position: absolute; right: 1px; bottom: 0; font: 700 10px system-ui, sans-serif; color: #fff; background: rgba(0,0,0,.45); border-radius: 4px; padding: 0 3px; }
+@keyframes reactIn { from { opacity: 0; transform: translate(-50%, 8px); } }
+/* touch: opens to the left of the heart button in #mobileBtns */
+body.touch #reactBar { left: auto; right: calc(72px + env(safe-area-inset-right)); bottom: calc(72px + env(safe-area-inset-bottom)); transform: none; gap: 4px; padding: 5px 6px; animation-name: reactInTouch; }
+body.touch #reactBar button { width: 40px; height: 40px; }
+body.touch #reactBar .spr { width: 28px; height: 28px; }
+@keyframes reactInTouch { from { opacity: 0; transform: translateX(8px); } }
+body.shopping #reactBar { display: none !important; }
+#reactBtn.on { background: rgba(255,78,122,.75); }
 #mobileBtns { position: absolute; right: calc(16px + env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom)); display: none; flex-direction: column; align-items: center; gap: 12px; }
 body.touch #mobileBtns { display: flex; }
 body.touch #speedo { bottom: calc(200px + env(safe-area-inset-bottom)); }

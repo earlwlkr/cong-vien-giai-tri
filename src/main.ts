@@ -18,6 +18,7 @@ import { drawSprite, hydrateSprites, isSprite, setRich, spriteEl, spriteURL } fr
 import { Vendors } from "./world/vendors";
 import { Fountain, WISHES } from "./world/fountain";
 import { makeItem } from "./items";
+import { REACTIONS, REACT_GAP_MS, REACT_STREAM_MS, parseAnim, reactionSprite } from "./reactions";
 import { CARTS, Cart, WISH_LUCKY_XU, WISH_PRICE, XU_QUOTA, XU_REFILL_MS, cartFront, getItem, isDrink } from "../convex/catalog";
 
 hydrateSprites();
@@ -173,6 +174,10 @@ const shopCamPos = new THREE.Vector3(), shopCamLook = new THREE.Vector3(), shopC
 let shopCamActive = false;
 /** performance.now() until which we're waving / mid coin toss. */
 let waveUntil = 0;
+/** Our latest reaction as streamed (`r<kind><n>`), until reactUntil. */
+let reactToken = "";
+let reactUntil = 0;
+let reactCount = 0;
 let throwUntil = 0;
 let wishPending = false;
 /** When we sat down (standOnMove rides ignore the stick for a moment, so a held W doesn't stand you right up). */
@@ -230,6 +235,8 @@ interface Remote {
   yaw: number;
   targetYaw: number;
   anim: string;
+  /** Last reaction token seen in their anim (a new one floats a sprite). */
+  react: string | null;
   ride: Ride | null;
   held: Held | null;
   name: string;
@@ -268,7 +275,7 @@ function syncRemotes(list: PlayerDoc[]) {
     if (!r) {
       const avatar = new Avatar(p.name, p.color, look);
       scene.add(avatar.group);
-      r = { avatar, pos: new THREE.Vector3(p.x, p.y, p.z), target: new THREE.Vector3(), yaw: p.ry, targetYaw: p.ry, anim: p.anim, ride: null, held: p.held, name: p.name, color: p.color, lookKey: lookKey(look) };
+      r = { avatar, pos: new THREE.Vector3(p.x, p.y, p.z), target: new THREE.Vector3(), yaw: p.ry, targetYaw: p.ry, anim: p.anim, react: null, ride: null, held: p.held, name: p.name, color: p.color, lookKey: lookKey(look) };
       remotes.set(p._id, r);
     }
     const prev = r.held, held = p.held ?? null;
@@ -285,7 +292,19 @@ function syncRemotes(list: PlayerDoc[]) {
       if (cartId) vendors.serve(cartId, performance.now(), false);
     }
     r.held = held;
-    if (p.anim !== r.anim && p.ride) rideOf(p.ride.kind)?.remoteAnim?.(r, p.anim, r.anim);
+    const a = parseAnim(p.anim);
+    if (p.anim !== r.anim && p.ride) {
+      const prev = parseAnim(r.anim).base;
+      if (a.base !== prev) rideOf(p.ride.kind)?.remoteAnim?.(r, a.base, prev);
+    }
+    if (a.react !== r.react) {
+      const spr = a.react && reactionSprite(a.react);
+      if (spr) {
+        r.avatar.react(spr, performance.now());
+        if (r.pos.distanceTo(me.pos) < 25) sfx.plip();
+      }
+      r.react = a.react;
+    }
     r.target.set(p.x, p.y, p.z);
     r.targetYaw = p.ry;
     r.anim = p.anim;
@@ -420,7 +439,11 @@ const chatForm = $("chatForm") as HTMLFormElement;
 const chatInput = $("chatInput") as HTMLInputElement;
 const seenMsgs = new Set<string>();
 let firstChat = true;
-function addChatLine(name: string | null, color: string, text: string, rich = false) {
+/** A chat line fades after CHAT_FADE_MS (still shown while the chat box is open) and is gone after CHAT_KEEP_MS. */
+const CHAT_FADE_MS = 12000;
+const CHAT_KEEP_MS = 3 * 60_000;
+/** `age`: how old the message already is (history loaded on join). */
+function addChatLine(name: string | null, color: string, text: string, rich = false, age = 0) {
   const d = document.createElement("div");
   d.className = "msg" + (name ? "" : " sys");
   if (name) {
@@ -436,7 +459,8 @@ function addChatLine(name: string | null, color: string, text: string, rich = fa
   } else d.appendChild(document.createTextNode(text));
   chatLog.appendChild(d);
   while (chatLog.children.length > 40) chatLog.firstElementChild!.remove();
-  setTimeout(() => d.classList.add("old"), 12000);
+  setTimeout(() => d.classList.add("old"), Math.max(4000, CHAT_FADE_MS - age));
+  setTimeout(() => d.remove(), CHAT_KEEP_MS - age);
 }
 function openChat() {
   if (!joined || editing) return;
@@ -530,6 +554,8 @@ input.onKey = (code) => {
   if (code === "KeyF") useHeld();
   else if (code === "KeyV") toggleCam();
   else if (code === "KeyG") wave();
+  else if (code === "KeyR") toggleReactBar();
+  else if (/^(Digit|Numpad)[1-9]$/.test(code)) react(+code.slice(-1) - 1);
   else if (code === "KeyE") interact();
   else if (code === "KeyQ" || code === "Escape") leaveActivity();
   else if (code === "Enter") openChat();
@@ -687,8 +713,49 @@ function wave() {
   waveUntil = t + 1800;
   myAvatar?.wave(t, 1800);
 }
-/** What we stream as `anim`: the pose, flagged while waving. */
-const withWave = (anim: string) => (performance.now() < waveUntil ? anim + "+w" : anim);
+/** Quick reaction (R bar / 1-6 / heart button): floats over our head; others see it via the streamed anim. */
+let lastReactAt = 0;
+function react(i: number) {
+  const r = REACTIONS[i];
+  if (!r || !joined || mode === "darts" || shopCart || editing) return;
+  const t = performance.now();
+  if (t - lastReactAt < REACT_GAP_MS) return;
+  lastReactAt = t;
+  reactCount = (reactCount + 1) % 10;
+  reactToken = `r${i}${reactCount}`;
+  reactUntil = t + REACT_STREAM_MS;
+  myAvatar?.react(r.sprite, t);
+  sfx.plip();
+}
+const reactBar = $("reactBar");
+function toggleReactBar(on = reactBar.classList.contains("hidden")) {
+  if (on && (!joined || mode === "darts" || shopCart || editing)) return;
+  reactBar.classList.toggle("hidden", !on);
+  $("reactBtn").classList.toggle("on", on);
+}
+REACTIONS.forEach((r, i) => {
+  const b = document.createElement("button");
+  b.title = r.label;
+  b.append(spriteEl(r.sprite));
+  if (!isTouch) {
+    const k = document.createElement("kbd");
+    k.textContent = String(i + 1);
+    b.append(k);
+  }
+  b.addEventListener("click", () => {
+    react(i);
+    if (isTouch) toggleReactBar(false);
+  });
+  reactBar.append(b);
+});
+$("reactBtn").addEventListener("click", () => toggleReactBar());
+/** What we stream as `anim`: the pose, flagged while waving (`+w`) and with a fresh reaction (`+r..`). */
+function withFlags(anim: string) {
+  const t = performance.now();
+  if (t < waveUntil) anim += "+w";
+  if (t < reactUntil) anim += "+" + reactToken;
+  return anim;
+}
 
 /** Fountain row (count = coins in the basin, last = latest wish). -1 until the first update. */
 let fountainSeen = -1;
@@ -705,6 +772,7 @@ function openShop(c: Cart) {
   shopCart = c;
   input.resetStick();
   closeChat();
+  toggleReactBar(false);
   const line = vendors.greet(c.id, performance.now());
   const head = $("shop").querySelector(".shopHead") as HTMLElement;
   head.style.background = `linear-gradient(90deg, ${c.color}, #ff9f1c)`;
@@ -900,6 +968,7 @@ function startDarts() {
   show("exitBtn", true);
   show("prompt", false);
   closeChat();
+  toggleReactBar(false);
   sfx.chime();
 }
 function endDarts(finished: boolean) {
@@ -986,6 +1055,7 @@ $("editBtn").addEventListener("click", () => openEditor());
 function openEditor() {
   if (!joined || editing) return;
   if (shopCart) closeShop();
+  toggleReactBar(false);
   editing = true;
   maker.set({ name: myName, color: myColor, look: myLook });
   setJoinMode("edit");
@@ -1096,7 +1166,10 @@ function startSession(c: ConvexClient) {
     for (const m of msgs) {
       if (seenMsgs.has(m._id)) continue;
       seenMsgs.add(m._id);
-      addChatLine(m.name, m.color, m.text);
+      // joining: skip what was said a while ago
+      const age = Math.max(0, now - m._creationTime);
+      if (age > CHAT_KEEP_MS - 5000) continue;
+      addChatLine(m.name, m.color, m.text, false, age);
       if (!firstChat && now - m._creationTime < 20000) {
         if (m.playerId === myId) myAvatar?.say(m.text, performance.now());
         else remotes.get(m.playerId)?.avatar.say(m.text, performance.now());
@@ -1157,6 +1230,7 @@ async function enter() {
   else addChatLine(null, "", `Chào mừng ${myName} đến Công Viên Giải Trí! {party} Hãy thử tàu lượn siêu tốc ở phía Tây Bắc nhé.`, true);
   addChatLine(null, "", `{coin} Bạn có ${xu() ?? XU_QUOTA} Xu để mua đồ ăn, nước uống ở các xe đẩy – tự nạp lại sau 6 giờ.`, true);
   addChatLine(null, "", "{pencil} Bấm nút bút chì ở góc trên để đổi tên hoặc nhân vật.", true);
+  addChatLine(null, "", isTouch ? "{heart} Bấm nút trái tim để thả cảm xúc cho mọi người cùng thấy." : "{heart} Bấm R hoặc phím 1–6 để thả cảm xúc, G để vẫy tay.", true);
   toast(isTouch ? "Kéo bên trái để đi, bên phải để nhìn" : "WASD để đi · kéo chuột để nhìn · V đổi góc nhìn · G vẫy tay", 4000);
   return true;
 }
@@ -1376,7 +1450,7 @@ function frame() {
       myAvatar.group.visible = true;
       if (shopCart) myAvatar.label.visible = false;
     }
-    netTick(me.pos, me.yaw, withWave(me.pose));
+    netTick(me.pos, me.yaw, withFlags(me.pose));
 
     // zones / prompt
     const z = currentZone();
@@ -1452,8 +1526,8 @@ function frame() {
         myAvatar.setFirstPerson(camMode === "fp");
       }
       const ns = def.netState?.();
-      if (ns) netTick(ns.pos, ns.ry, ns.anim, false, DRIVE_SEND_MS);
-      else netTick(sendPos.copy(tmpPos), me.yaw, withWave(def.pose(0)), true);
+      if (ns) netTick(ns.pos, ns.ry, withFlags(ns.anim), false, DRIVE_SEND_MS);
+      else netTick(sendPos.copy(tmpPos), me.yaw, withFlags(def.pose(0)), true);
 
       if (def.hud) def.hud(res, dt);
       else {
@@ -1509,8 +1583,7 @@ function frame() {
 
   // remotes
   for (const r of remotes.values()) {
-    const waving = r.anim.endsWith("+w");
-    const anim = waving ? r.anim.slice(0, -2) : r.anim;
+    const { base: anim, waving } = parseAnim(r.anim);
     if (waving) r.avatar.wave(performance.now(), 300);
     let pose: Pose = (["idle", "walk", "run", "jump", "throw"].includes(anim) ? anim : "idle") as Pose;
     let seated = false;
@@ -1589,7 +1662,7 @@ if (import.meta.env.DEV) {
     get ride() { return myRide; },
     get held() { return myHeld; },
     get wallet() { return wallet; },
-    vendors, openShop: (i: number) => openShop(CARTS[i]), buy, useHeld, fountain, wish, wave,
+    vendors, openShop: (i: number) => openShop(CARTS[i]), buy, useHeld, fountain, wish, wave, react,
     get wishing() { return wishPending; },
     cartFront: (i: number) => cartFront(CARTS[i]),
     tp(x: number, z: number) { me.pos.set(x, 0, z); },

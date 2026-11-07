@@ -155,6 +155,13 @@ export class Sfx {
     this.tone(880, 0.25, 0.2, "triangle");
     this.tone(1320, 0.35, 0.15, "triangle", (this.ctx?.currentTime ?? 0) + 0.08);
   }
+  /** Soft bubble blip for a reaction. */
+  plip() {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.tone(1046, 0.12, 0.08, "sine", t);
+    this.tone(1568, 0.16, 0.06, "sine", t + 0.05);
+  }
   chime() {
     if (!this.enabled || !this.ctx) return;
     const t = this.ctx.currentTime;

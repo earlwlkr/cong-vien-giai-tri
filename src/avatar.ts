@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { makeLabel, disposeLabel, shade, std } from "./util";
+import { spriteCanvas, type SpriteName } from "./sprites";
 import { HAIR_COLORS, Look, SHOE_COLORS, SKIN_TONES, cleanLook } from "../convex/looks";
 
 export type Pose = "idle" | "walk" | "run" | "jump" | "sit" | "bench" | "cheer" | "horse" | "throw" | "wave" | "serve";
@@ -14,6 +15,21 @@ export const HIP_HEIGHT = HIP * SCALE;
 export const EYE_OFFSET = (NECK + HEAD_CY - 0.03) * SCALE; // from hip to eyes
 export const EYE_HEIGHT = HIP_HEIGHT + EYE_OFFSET;
 
+/** Reaction sprite textures, shared by every avatar (never disposed). */
+const reactTex = new Map<SpriteName, THREE.Texture>();
+function reactionTexture(name: SpriteName) {
+  let t = reactTex.get(name);
+  if (!t) {
+    t = new THREE.CanvasTexture(spriteCanvas(name, 4));
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.magFilter = THREE.NearestFilter;
+    t.minFilter = THREE.NearestFilter;
+    t.generateMipmaps = false;
+    reactTex.set(name, t);
+  }
+  return t;
+}
+const REACT_LIFE = 2.2; // seconds a reaction floats
 
 export class Avatar {
   group = new THREE.Group();
@@ -40,6 +56,7 @@ export class Avatar {
   private wavePhase = 0;
   private chew = 0;
   private puffs: { s: THREE.Sprite; t: number }[] = [];
+  private reacts: { s: THREE.Sprite; t: number; x: number; ph: number }[] = [];
 
   readonly look: Look;
 
@@ -323,6 +340,27 @@ export class Avatar {
     this.puffs.push({ s, t: now });
   }
 
+  /** A reaction sprite (heart, haha...) that pops above the head, sways up and fades. */
+  react(name: SpriteName, now: number) {
+    if (this.reacts.length >= 6) this.dropReact(this.reacts.shift()!);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: reactionTexture(name), depthWrite: false, transparent: true }));
+    s.center.set(0.5, 0);
+    s.renderOrder = 11;
+    const x = (Math.random() - 0.5) * 0.5;
+    s.position.set(x, 2.38, 0);
+    s.scale.setScalar(0.01);
+    this.group.add(s);
+    this.reacts.push({ s, t: now, x, ph: Math.random() * 6 });
+  }
+  /** Reactions floating right now (tests). */
+  get reacting() {
+    return this.reacts.length;
+  }
+  private dropReact(r: { s: THREE.Sprite }) {
+    this.group.remove(r.s);
+    r.s.material.dispose();
+  }
+
   setFirstPerson(fp: boolean) {
     this.head.visible = !fp;
     this.label.visible = !fp;
@@ -462,6 +500,24 @@ export class Avatar {
         return true;
       });
     }
+    if (this.reacts.length) {
+      // start above the chat bubble if there is one
+      const base = this.bubble ? this.bubble.position.y + this.bubble.scale.y + 0.1 : 2.38;
+      this.reacts = this.reacts.filter((r) => {
+        const age = (now - r.t) / 1000;
+        if (age > REACT_LIFE) {
+          this.dropReact(r);
+          return false;
+        }
+        // pop in with a little overshoot, then drift up and fade out
+        const a = Math.min(1, age / 0.25) - 1;
+        const size = 0.62 * Math.max(0.01, 1 + 2.7 * a * a * a + 1.7 * a * a); // ease-out-back
+        r.s.scale.set(size, size, 1);
+        r.s.position.set(r.x + Math.sin(age * 4 + r.ph) * 0.12, base + age * 0.45, 0);
+        r.s.material.opacity = Math.min(1, (REACT_LIFE - age) * 2.5);
+        return true;
+      });
+    }
     if (pose === "sit" || pose === "bench" || pose === "cheer" || pose === "horse") hipY = HIP;
     this.hips.position.y = hipY;
     this.hips.rotation.x += (lean - this.hips.rotation.x) * k;
@@ -482,6 +538,7 @@ export class Avatar {
   dispose() {
     this.setHeld(null);
     for (const p of this.puffs) disposeLabel(p.s);
+    for (const r of this.reacts) r.s.material.dispose();
     this.group.removeFromParent();
     disposeLabel(this.label);
     if (this.bubble) disposeLabel(this.bubble);

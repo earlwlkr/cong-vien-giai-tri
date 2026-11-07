@@ -25,7 +25,8 @@ World layout (metres; +z = south, entrance gate at z≈99): hub and spokes. Plaz
 - Scheduled rides (`schedule` in `RideDef`: coaster, drop, ship, swing) get the shared queue / auto-board logic for free.
 - Driven rides (`bumper`) implement `drive` (local physics), `netState` (what to stream), `follow` (place remote riders).
 - Benches are a `RideDef` too (`kind: "bench"`, key `bench:i`, 2 seats, no clock): `zones` gives one prompt spot per bench, no `place`, `standOnMove` gets you up when you walk, `exitLabel` renames the exit button.
-- Plaza extras live in `main.ts` like darts: the fountain zone (`wish()` → `fountain.wish`, everyone plays the toss from the `fountain.state` subscription; water show every 90 s from the shared clock) and waving (`G` / `#waveBtn`, streamed as an `anim` suffix `+w`).
+- Plaza extras live in `main.ts` like darts: the fountain zone (`wish()` → `fountain.wish`, everyone plays the toss from the `fountain.state` subscription; water show every 90 s from the shared clock), waving (`G` / `#waveBtn`, streamed as an `anim` flag `+w`) and reactions (`src/reactions.ts`: `R` bar / `1`–`6` / `#reactBtn`, flag `+r<kind><n>` for 2 s, floated by `Avatar.react`). Parse anims with `parseAnim`; rides' `remoteAnim` gets the bare pose.
+- Chat: lines fade after 12 s (visible again while the box is open) and are removed after 3 min; on join only messages younger than that are shown.
 - `players.board` only enforces unique `(key, seat)`; it trusts the client for the rest.
 
 ### Adding a ride (checklist)
@@ -52,8 +53,8 @@ World layout (metres; +z = south, entrance gate at z≈99): hub and spokes. Plaz
 ## Testing
 - `npm run typecheck`, `npm run build`.
 - `npm run e2e`: starts a **local Convex backend** (`e2e/convex-local.mjs`: anonymous local `convex dev` in `../.convex-local-<checkout>/`, free, never touches `.env.local`; `E2E_CLOUD=1` uses the dev cloud instead), its own Vite server pointed at it, and headless Chromium (software GL, `?lowgfx`), joins a player, boards every ride, plays darts, buys a snack; fails on any page error. Takes about a minute. `npm run e2e -- drop bumper` runs only some. Screenshots land in `e2e/out/` (look at them).
-- `npm run e2e:bumper`: two players ram each other. `npm run e2e:ride-sync`: a remote rider on a clock-driven ride is placed right while only heartbeating. `npm run e2e:plaza`: two players share a bench, wave, and one's wish reaches the other.
-- Dev-only hooks on `window.__game`: `tp(x,z)`, `interact()`, `warp(sec)` (fast-forward the local ride clock), `nextBoarding(kind)`, `setCam`, `rides` (Map of RideDefs), world objects (`coaster`, `tower`, `bumpers`…), `openShop`, `buy`, `cartFront(i)`, `mode`, `ride`, `held`, `wallet`, `benches`, `fountain` (`showPhase`, `nextShow`, `coinCount`), `wish`, `wishing`, `wave`.
+- `npm run e2e:bumper`: two players ram each other. `npm run e2e:ride-sync`: a remote rider on a clock-driven ride is placed right while only heartbeating. `npm run e2e:plaza`: two players share a bench, wave, react, and one's wish reaches the other.
+- Dev-only hooks on `window.__game`: `tp(x,z)`, `interact()`, `warp(sec)` (fast-forward the local ride clock), `nextBoarding(kind)`, `setCam`, `rides` (Map of RideDefs), world objects (`coaster`, `tower`, `bumpers`…), `openShop`, `buy`, `cartFront(i)`, `mode`, `ride`, `held`, `wallet`, `benches`, `fountain` (`showPhase`, `nextShow`, `coinCount`), `wish`, `wishing`, `wave`, `react(i)`.
 - Local dev (`npm run dev`) uses `.env.local`, which points to the **dev** cloud deployment; e2e and promo capture use the local backend. Test players never touch prod.
 - Write new checks in `e2e/` with `lib.mjs` (`player`, `until`, `check`, `shot`, `finish`).
 
