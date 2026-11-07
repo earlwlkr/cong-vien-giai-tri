@@ -123,54 +123,6 @@ export function buildPark(scene: THREE.Scene, blocked: (x: number, z: number) =>
   plaza.receiveShadow = true;
   scene.add(plaza);
 
-  // ---- fountain ----
-  const fountain = new THREE.Group();
-  const stone = std("#d6d0c4");
-  const basin = new THREE.Mesh(new THREE.CylinderGeometry(6, 6.3, 0.7, 40, 1, true), stone);
-  basin.position.y = 0.35;
-  const rimM = new THREE.Mesh(new THREE.TorusGeometry(6.05, 0.22, 8, 48), stone);
-  rimM.rotation.x = Math.PI / 2;
-  rimM.position.y = 0.7;
-  const waterMat = new THREE.MeshStandardMaterial({ color: "#4cc9f0", roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.85 });
-  const water = new THREE.Mesh(new THREE.CircleGeometry(5.9, 40), waterMat);
-  water.rotation.x = -Math.PI / 2;
-  water.position.y = 0.55;
-  const tier1 = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.9, 2.2, 16), stone);
-  tier1.position.y = 1.1;
-  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 1.0, 0.5, 24), stone);
-  bowl.position.y = 2.3;
-  const tier2 = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, 1.4, 12), stone);
-  tier2.position.y = 3.2;
-  const bowl2 = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 0.5, 0.35, 20), stone);
-  bowl2.position.y = 3.9;
-  fountain.add(basin, rimM, water, tier1, bowl, tier2, bowl2);
-  const jetMat = new THREE.MeshStandardMaterial({ color: "#bde9ff", transparent: true, opacity: 0.6, roughness: 0.1 });
-  const jet = new THREE.Mesh(new THREE.ConeGeometry(0.35, 3, 12, 1, true), jetMat);
-  jet.position.y = 5.4;
-  jet.rotation.x = Math.PI;
-  const jets: THREE.Mesh[] = [];
-  for (let i = 0; i < 8; i++) {
-    const j = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.12, 2.2, 6, 1, true), jetMat);
-    const a = (i / 8) * Math.PI * 2;
-    j.position.set(Math.cos(a) * 4.3, 1.4, Math.sin(a) * 4.3);
-    j.rotation.z = Math.cos(a) * 0.35;
-    j.rotation.x = -Math.sin(a) * 0.35;
-    jets.push(j);
-    fountain.add(j);
-  }
-  const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.25, 3, 8, 1, true), jetMat);
-  spout.position.y = 5.5;
-  fountain.add(jet, spout);
-  fountain.traverse((o) => { if ((o as THREE.Mesh).isMesh && (o as THREE.Mesh).material === stone) { o.castShadow = true; o.receiveShadow = true; } });
-  scene.add(fountain);
-  colliders.push({ x: 0, z: 0, r: 6.5 });
-  animated.push((t) => {
-    spout.scale.y = 1 + Math.sin(t * 3) * 0.12;
-    jets.forEach((j, i) => (j.scale.y = 1 + Math.sin(t * 4 + i) * 0.15));
-    jet.rotation.y = t;
-    water.position.y = 0.55 + Math.sin(t * 2) * 0.02;
-  });
-
   // ---- entrance gate ----
   const gate = new THREE.Group();
   gate.position.set(0, 0, 99);
@@ -347,35 +299,6 @@ export function buildPark(scene: THREE.Scene, blocked: (x: number, z: number) =>
     }
   }
   scene.add(flags);
-
-  // benches around the plaza
-  const benchMat = std("#a0522d");
-  /** Angles where paths leave the plaza. */
-  const mouths = PATHS.map((p) => p.pts[0]).filter(([x, z]) => Math.abs(Math.hypot(x, z) - PLAZA_R) < 2).map(([x, z]) => Math.atan2(z, x));
-  for (let a = 0; a < 8; a++) {
-    const ang = (a / 8) * Math.PI * 2 + Math.PI / 8;
-    const r = PLAZA_R - 2.5;
-    const x = Math.cos(ang) * r, z = Math.sin(ang) * r;
-    if (Math.abs(x) < 6 && z > 0) continue;
-    if (mouths.some((m) => Math.abs(Math.atan2(Math.sin(m - ang), Math.cos(m - ang))) < 0.3)) continue; // keep path mouths clear
-    const b = new THREE.Group();
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 0.6), benchMat);
-    seat.position.y = 0.48;
-    const back = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.5, 0.1), benchMat);
-    back.position.set(0, 0.8, -0.28);
-    const legM = std("#333");
-    for (const lx of [-0.95, 0.95]) {
-      const l = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.48, 0.55), legM);
-      l.position.set(lx, 0.24, 0);
-      b.add(l);
-    }
-    b.add(seat, back);
-    b.position.set(x, 0, z);
-    b.rotation.y = -ang - Math.PI / 2;
-    b.traverse((o) => ((o as THREE.Mesh).isMesh && (o.castShadow = true)));
-    scene.add(b);
-    colliders.push({ x, z, r: 1.0 });
-  }
 
   // flower beds in the plaza
   const flowerGeo = new THREE.SphereGeometry(0.18, 6, 4);

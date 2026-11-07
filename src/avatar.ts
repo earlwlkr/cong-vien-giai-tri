@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { makeLabel, disposeLabel, shade, std } from "./util";
 import { HAIR_COLORS, Look, SHOE_COLORS, SKIN_TONES, cleanLook } from "../convex/looks";
 
-export type Pose = "idle" | "walk" | "run" | "jump" | "sit" | "cheer" | "horse" | "throw" | "wave" | "serve";
+export type Pose = "idle" | "walk" | "run" | "jump" | "sit" | "bench" | "cheer" | "horse" | "throw" | "wave" | "serve";
 
 // Low-poly chibi proportions: short legs, faceted body, big head.
 const SCALE = 0.95;
@@ -36,6 +36,8 @@ export class Avatar {
   private held: THREE.Object3D | null = null;
   heldKey = "";
   private eatUntil = 0;
+  private waveUntil = 0;
+  private wavePhase = 0;
   private chew = 0;
   private puffs: { s: THREE.Sprite; t: number }[] = [];
 
@@ -308,6 +310,11 @@ export class Avatar {
     this.eatUntil = now + ms;
   }
 
+  /** Waves hello with the right hand for a moment; layers on top of any pose (walking, seated...). */
+  wave(now: number, ms = 1800) {
+    this.waveUntil = now + ms;
+  }
+
   /** Little floating text (e.g. "măm!") that rises and fades. */
   puff(text: string, now: number, color = "#ffffff") {
     const s = makeLabel(text, { bg: "rgba(255,120,80,0.92)", color, height: 0.24, font: 34 });
@@ -363,6 +370,17 @@ export class Avatar {
         set(this.armL, -0.6, 0.15);
         set(this.armR, -0.6, -0.15);
         break;
+      case "bench": {
+        // feet dangling off the plank, swinging now and then
+        this.phase += dt * 2.2;
+        const swing = Math.max(0, Math.sin(this.phase * 0.3)) * Math.sin(this.phase * 2.4) * 0.22;
+        set(this.legL, -1.25 + swing, 0.1);
+        set(this.legR, -1.25 - swing, -0.1);
+        set(this.armL, -0.7, 0.12);
+        set(this.armR, -0.7, -0.12);
+        tilt = Math.sin(this.phase * 0.45) * 0.07;
+        break;
+      }
       case "cheer": {
         this.phase += dt * 7;
         set(this.legL, -1.5, 0.12);
@@ -412,7 +430,12 @@ export class Avatar {
       }
     }
     const eating = now < this.eatUntil;
-    if (eating) {
+    const waving = !eating && now < this.waveUntil;
+    if (waving) {
+      this.wavePhase += dt * 10;
+      set(this.armR, -0.2, -2.5 + Math.sin(this.wavePhase) * 0.35);
+      tilt = 0.1;
+    } else if (eating) {
       this.chew += dt * 9;
       set(this.armR, -2.45 + Math.sin(this.chew) * 0.1, 0.42);
       tilt = Math.sin(this.chew) * 0.05;
@@ -439,13 +462,13 @@ export class Avatar {
         return true;
       });
     }
-    if (pose === "sit" || pose === "cheer" || pose === "horse") hipY = HIP;
+    if (pose === "sit" || pose === "bench" || pose === "cheer" || pose === "horse") hipY = HIP;
     this.hips.position.y = hipY;
     this.hips.rotation.x += (lean - this.hips.rotation.x) * k;
     this.head.rotation.z += (tilt - this.head.rotation.z) * k;
 
     // ^ ^ eyes when excited, otherwise blink every few seconds
-    const happy = pose === "cheer" || pose === "jump" || pose === "wave" || eating;
+    const happy = pose === "cheer" || pose === "jump" || pose === "wave" || eating || waving;
     if (!this.nextBlink) this.nextBlink = now + 1500 + Math.random() * 3000;
     if (now > this.nextBlink + 130) this.nextBlink = now + 2200 + Math.random() * 3500;
     const blinking = now > this.nextBlink;

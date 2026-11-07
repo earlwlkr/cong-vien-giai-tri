@@ -16,8 +16,9 @@ import { keyIndex } from "./rides/types";
 import { buildPark, BOUNDS, PATHS, PLAZA_R } from "./world/park";
 import { drawSprite, hydrateSprites, isSprite, setRich, spriteEl, spriteURL } from "./sprites";
 import { Vendors } from "./world/vendors";
+import { Fountain, WISHES } from "./world/fountain";
 import { makeItem } from "./items";
-import { CARTS, Cart, XU_QUOTA, XU_REFILL_MS, cartFront, getItem, isDrink } from "../convex/catalog";
+import { CARTS, Cart, WISH_LUCKY_XU, WISH_PRICE, XU_QUOTA, XU_REFILL_MS, cartFront, getItem, isDrink } from "../convex/catalog";
 
 hydrateSprites();
 (document.querySelector("link[rel=icon]") as HTMLLinkElement | null)?.setAttribute("href", spriteURL("coaster"));
@@ -122,19 +123,22 @@ function blocked(x: number, z: number) {
 const park = buildPark(scene, blocked, isTouch);
 const vendors = new Vendors();
 scene.add(vendors.group);
-const colliders: Collider[] = [...park.colliders, ...vendors.colliders, ...rides.list.flatMap((r) => r.colliders)];
+const fountain = new Fountain();
+scene.add(fountain.group);
+const colliders: Collider[] = [...park.colliders, ...fountain.colliders, ...vendors.colliders, ...rides.list.flatMap((r) => r.colliders)];
 const boxes: BoxCollider[] = [...park.boxes, ...darts.boxes, ...rides.list.flatMap((r) => r.boxes ?? [])];
 
-/** Where E does something: a ride's boarding area, or the darts stand. */
+/** Where E does something: a ride's boarding area, the darts stand, or the fountain's edge. */
 type Zone = { id: string; ride?: RideDef; x: number; z: number; r: number };
 const zones: Zone[] = [
-  ...rides.list.map((r) => ({ id: r.kind, ride: r, ...r.zone })),
+  ...rides.list.flatMap((r) => (r.zones ?? [r.zone]).map((z) => ({ id: r.kind, ride: r, ...z }))),
   { id: "darts", x: darts.standPoint.x, z: darts.standPoint.z + 0.8, r: 3.4 },
+  { id: "fountain", x: 0, z: 0, r: fountain.reach },
 ];
 const places = [
   { n: "{gate} Cổng chính", x: 0, z: 92, r: 14 },
   { n: "{fountain} Quảng trường", x: 0, z: 0, r: 24 },
-  ...rides.list.map((r) => ({ n: r.place.name, x: r.place.x, z: r.place.z, r: r.place.r })),
+  ...rides.list.flatMap((r) => (r.place ? [{ n: r.place.name, x: r.place.x, z: r.place.z, r: r.place.r }] : [])),
   { n: "{target} Ném phi tiêu", x: -52, z: 19, r: 12 },
   { n: "{icecream} Phố ẩm thực", x: 0, z: 52, r: 22 },
 ];
@@ -167,6 +171,14 @@ let shopCart: Cart | null = null;
 let buyPending = false;
 const shopCamPos = new THREE.Vector3(), shopCamLook = new THREE.Vector3(), shopCamFrom = new THREE.Vector3();
 let shopCamActive = false;
+/** performance.now() until which we're waving / mid coin toss. */
+let waveUntil = 0;
+let throwUntil = 0;
+let wishPending = false;
+/** When we sat down (standOnMove rides ignore the stick for a moment, so a held W doesn't stand you right up). */
+let boardedAt = 0;
+/** Yaw of our seat last frame: standing up from a bench keeps the view. */
+let seatYaw = 0;
 
 // ---------------- Xu wallet (per device; refills every 6h) ----------------
 const WALLET_KEY = "cvgt-wallet";
@@ -487,16 +499,17 @@ $("jumpBtn").addEventListener("pointerdown", (e) => {
 $("exitBtn").addEventListener("click", () => leaveActivity());
 $("prompt").addEventListener("click", () => interact());
 $("useBtn").addEventListener("click", () => useHeld());
+$("waveBtn").addEventListener("click", () => wave());
 $("shopClose").addEventListener("click", () => closeShop());
 const EXIT_LABEL = isTouch ? "{back} Rời trò chơi" : "{back} Rời trò chơi (Q)";
 const EXIT_LABEL_RIDE = isTouch ? "{back} Xuống" : "{back} Xuống (Q)";
 setRich($("exitBtn"), EXIT_LABEL);
 /** On a ride: hide everything that isn't needed while seated (minimap, location, jump, etc). */
-function setRidingUI(on: boolean) {
+function setRidingUI(on: boolean, exitLabel?: string) {
   document.body.classList.toggle("riding", on);
   // Seated: stack the exit button in the top-left column (players, ride status, exit) so nothing overlaps.
   (on ? $("topLeft") : $("ui")).appendChild($("exitBtn"));
-  setRich($("exitBtn"), on ? EXIT_LABEL_RIDE : EXIT_LABEL);
+  setRich($("exitBtn"), !on ? EXIT_LABEL : exitLabel ? exitLabel + (isTouch ? "" : " (Q)") : EXIT_LABEL_RIDE);
 }
 
 input.onKey = (code) => {
@@ -516,6 +529,7 @@ input.onKey = (code) => {
   }
   if (code === "KeyF") useHeld();
   else if (code === "KeyV") toggleCam();
+  else if (code === "KeyG") wave();
   else if (code === "KeyE") interact();
   else if (code === "KeyQ" || code === "Escape") leaveActivity();
   else if (code === "Enter") openChat();
@@ -546,11 +560,11 @@ function ridePoseName(kind: string, speed = 0): Pose {
   return rideOf(kind)?.pose(speed) ?? "sit";
 }
 
-async function doBoard(kind: string, key: string, maxSeats: number, start: number) {
+async function doBoard(kind: string, key: string, maxSeats: number, start: number, preferSeat?: number) {
   if (!client || !myId || boardingPending) return;
   boardingPending = true;
   try {
-    const r = await client.mutation(api.players.board, { id: myId, kind, key, maxSeats, start });
+    const r = await client.mutation(api.players.board, { id: myId, kind, key, maxSeats, start, preferSeat });
     if (!r) {
       toast("Hết chỗ rồi, thử lại sau nhé!");
       return;
@@ -562,8 +576,9 @@ async function doBoard(kind: string, key: string, maxSeats: number, start: numbe
     rideLookYaw = 0;
     rideLookPitch = camMode === "fp" ? pitch[0] : pitch[1];
     input.resetStick();
+    boardedAt = performance.now();
     sfx.chime();
-    setRidingUI(true);
+    setRidingUI(true, def?.exitLabel);
     def?.onBoard?.(r);
     show("exitBtn", true);
     show("prompt", false);
@@ -591,7 +606,7 @@ function boardRide(def: RideDef) {
   }
   const spec = def.pick?.(now);
   if (typeof spec === "string") toast(spec);
-  else if (spec) doBoard(def.kind, spec.key, spec.maxSeats, spec.start);
+  else if (spec) doBoard(def.kind, spec.key, spec.maxSeats, spec.start, spec.seat);
 }
 
 function interact() {
@@ -608,7 +623,76 @@ function interact() {
   sfx.init();
   if (z.ride) boardRide(z.ride);
   else if (z.id === "darts") startDarts();
+  else if (z.id === "fountain") wish();
 }
+
+// ---------------- fountain wishes & waving ----------------
+/** Toss a coin into the fountain (convex/fountain.ts): everyone sees it fly, splash and the jet burst. */
+async function wish() {
+  if (!client || !myId || wishPending || mode !== "walk") return;
+  const bal = xu();
+  if (bal !== null && bal < WISH_PRICE) {
+    toast(`{coin} Hết Xu để ước rồi! Nạp lại sau ${fmtDur(refillLeft())}`, 3200);
+    return;
+  }
+  wishPending = true;
+  // face the water and throw
+  me.yaw = camMode === "fp" ? me.yaw : Math.atan2(-me.pos.x, -me.pos.z);
+  throwUntil = performance.now() + 650;
+  sfx.whoosh();
+  const hand = new THREE.Vector3(Math.sin(me.yaw) * 0.35, 1.45, Math.cos(me.yaw) * 0.35).add(me.pos);
+  const landed = new Promise<void>((res) =>
+    fountain.toss(hand, clock.elapsedTime, () => {
+      sfx.splash();
+      fountain.burst(clock.elapsedTime);
+      res();
+    }),
+  );
+  try {
+    // make sure the server has us at the water's edge
+    if (myPos) await client.mutation(api.players.update, { pos: myPos, x: me.pos.x, y: me.pos.y, z: me.pos.z, ry: me.yaw, anim: me.pose });
+    const r = await client.mutation(api.fountain.wish, { id: myId, token: walletToken });
+    await landed;
+    if (r.ok) {
+      wallet = { balance: r.balance, cycleStart: r.cycleStart };
+      fountainSeen = Math.max(fountainSeen, r.count);
+      fountain.setCoins(fountainSeen);
+      $("wallet").classList.remove("bump");
+      void $("wallet").offsetWidth;
+      $("wallet").classList.add("bump");
+      if (r.lucky) {
+        sfx.coin();
+        myAvatar?.puff(`+${WISH_LUCKY_XU} Xu!`, performance.now(), "#ffd166");
+        toast(`{coin} Trúng lớn! Thần đài phun nước lì xì bạn ${WISH_LUCKY_XU} Xu!`, 3800);
+      } else {
+        sfx.ding();
+        toast(`{star} ${WISHES[Math.floor(Math.random() * WISHES.length)]}`, 3600);
+      }
+    } else if (r.reason === "poor") {
+      if (r.balance !== undefined && wallet) wallet.balance = r.balance;
+      toast(`{coin} Hết Xu để ước rồi! Nạp lại sau ${fmtDur(refillLeft())}`, 3200);
+    } else if (r.reason === "far") toast("Lại gần đài phun nước hơn chút nhé!");
+    else if (r.reason === "player") rejoin();
+  } catch {
+    toast("Lỗi kết nối, thử lại nhé");
+  } finally {
+    wishPending = false;
+  }
+}
+
+/** Wave hello (G / hand button). Others see it through the streamed anim ("…+w"). */
+function wave() {
+  if (!joined || mode === "darts" || shopCart || editing) return;
+  const t = performance.now();
+  waveUntil = t + 1800;
+  myAvatar?.wave(t, 1800);
+}
+/** What we stream as `anim`: the pose, flagged while waving. */
+const withWave = (anim: string) => (performance.now() < waveUntil ? anim + "+w" : anim);
+
+/** Fountain row (count = coins in the basin, last = latest wish). -1 until the first update. */
+let fountainSeen = -1;
+let showWasOn = false;
 
 // ---------------- food carts ----------------
 const cartName = (c: Cart) => c.title.charAt(0) + c.title.slice(1).toLowerCase();
@@ -780,6 +864,12 @@ function leaveRideLocal() {
   if (!myRide) return;
   const def = rideOf(myRide.kind);
   if (def) me.pos.copy(def.exit(myRide, serverNow()));
+  if (def?.standOnMove) {
+    // stand up looking where we looked while seated
+    me.yaw = seatYaw;
+    camYaw = seatYaw + rideLookYaw + (def.camera.lookBack && camMode === "tp" ? Math.PI : 0);
+    camPitch = Math.max(-0.6, Math.min(0.3, rideLookPitch));
+  }
   def?.onLeave?.(myRide);
   me.vel.set(0, 0, 0);
   me.vy = 0;
@@ -1015,6 +1105,24 @@ function startSession(c: ConvexClient) {
     }
     firstChat = false;
   });
+  c.onUpdate(api.fountain.state, {}, (f) => {
+    const first = fountainSeen < 0;
+    if (f.count <= fountainSeen) return;
+    fountainSeen = f.count;
+    const w = f.last;
+    // someone else's wish: play their coin toss (ours plays from wish())
+    if (!first && w && w.player !== myId && serverNow() - w.at < 15000) {
+      const r = remotes.get(w.player);
+      const from = r ? r.avatar.group.position.clone().setY(1.45) : new THREE.Vector3(w.x, 1.45, w.z);
+      r?.avatar.puff("ước nè!", performance.now());
+      fountain.toss(from, clock.elapsedTime, () => {
+        fountain.setCoins(fountainSeen);
+        fountain.burst(clock.elapsedTime);
+        if (me.pos.lengthSq() < 30 * 30) sfx.splash();
+      });
+      if (w.lucky) addChatLine(null, "", `{coin} ${w.name.replace(/[{}]/g, "")} vừa được thần đài phun nước lì xì ${WISH_LUCKY_XU} Xu!`, true);
+    } else if (first || w?.player !== myId) fountain.setCoins(f.count);
+  });
   c.onUpdate(api.scores.top, { game: "darts" }, (s) => {
     topScores = s;
     renderBoard();
@@ -1049,7 +1157,7 @@ async function enter() {
   else addChatLine(null, "", `Chào mừng ${myName} đến Công Viên Giải Trí! {party} Hãy thử tàu lượn siêu tốc ở phía Tây Bắc nhé.`, true);
   addChatLine(null, "", `{coin} Bạn có ${xu() ?? XU_QUOTA} Xu để mua đồ ăn, nước uống ở các xe đẩy – tự nạp lại sau 6 giờ.`, true);
   addChatLine(null, "", "{pencil} Bấm nút bút chì ở góc trên để đổi tên hoặc nhân vật.", true);
-  toast(isTouch ? "Kéo bên trái để đi, bên phải để nhìn" : "WASD để đi · kéo chuột để nhìn · V đổi góc nhìn", 4000);
+  toast(isTouch ? "Kéo bên trái để đi, bên phải để nhìn" : "WASD để đi · kéo chuột để nhìn · V đổi góc nhìn · G vẫy tay", 4000);
   return true;
 }
 
@@ -1093,7 +1201,7 @@ mmBg.height = mm.height;
   const [bx1, bz1] = toMap(BOUNDS.maxX, BOUNDS.maxZ);
   g.strokeRect(bx0, bz0, bx1 - bx0, bz1 - bz0);
   for (const c of CARTS) if (isSprite(c.sprite)) drawSprite(g, c.sprite, ...toMap(c.x, c.z), 10);
-  for (const r of rides.list) drawSprite(g, r.place.icon, ...toMap(r.place.x, r.place.z), 16);
+  for (const r of rides.list) if (r.place) drawSprite(g, r.place.icon, ...toMap(r.place.x, r.place.z), 16);
   for (const [e, x, z] of [["target", -52, 16], ["fountain", 0, 0], ["gate", 0, 96]] as const) drawSprite(g, e, ...toMap(x, z), 16);
 }
 function drawMinimap() {
@@ -1177,6 +1285,7 @@ function frame() {
 
   for (const r of rides.list) r.update?.(now, t);
   park.update(t);
+  fountain.update(now, t);
   darts.update(dt, now, scene);
 
   const look = input.consumeLook();
@@ -1232,6 +1341,7 @@ function frame() {
     else if (camMode === "fp") me.yaw = camYaw;
     else if (hs > 0.3) me.yaw = dampAngle(me.yaw, Math.atan2(me.vel.x, me.vel.z), 12, dt);
     me.pose = !me.onGround ? "jump" : hs > 6 ? "run" : hs > 0.4 ? "walk" : "idle";
+    if (me.onGround && performance.now() < throwUntil) me.pose = "throw";
 
     // camera
     lookDir.set(Math.sin(camYaw) * Math.cos(camPitch), Math.sin(camPitch), Math.cos(camYaw) * Math.cos(camPitch));
@@ -1266,7 +1376,7 @@ function frame() {
       myAvatar.group.visible = true;
       if (shopCart) myAvatar.label.visible = false;
     }
-    netTick(me.pos, me.yaw, me.pose);
+    netTick(me.pos, me.yaw, withWave(me.pose));
 
     // zones / prompt
     const z = currentZone();
@@ -1276,7 +1386,8 @@ function frame() {
       const isQueued = !!def && queued === def.kind;
       // queued for a scheduled ride: hop on as soon as it's boarding
       if (isQueued && def.schedule?.boardable(now, 3)) boardRide(def);
-      setText("prompt", def ? def.prompt(now, isQueued) : `{target} Chơi ném phi tiêu${isTouch ? "" : " (E)"}`);
+      const key = isTouch ? "" : " (E)";
+      setText("prompt", def ? def.prompt(now, isQueued) : z.id === "fountain" ? `{coin} Ném xu ước nguyện · ${WISH_PRICE} Xu${key}` : `{target} Chơi ném phi tiêu${key}`);
     }
     const cart = !z && !shopCart ? vendors.at(me.pos.x, me.pos.z) : null;
     if (cart) setText("prompt", `{${cart.sprite}} Mua ${cartName(cart)}${isTouch ? "" : " (E)"}`);
@@ -1292,13 +1403,17 @@ function frame() {
     rideLookPitch = Math.max(-1.3, Math.min(1.2, rideLookPitch));
     const def = rideOf(myRide.kind);
     let res: RideResult;
+    let jumped = false;
     if (!def) res = { ok: false, done: true };
     else if (def.drive) res = def.drive(dt, tmpPos, tmpQuat);
     else {
-      input.consumeJump();
+      jumped = input.consumeJump();
       res = def.seatPose(myRide, now, tmpPos, tmpQuat);
     }
-    if (!def || !res.ok || res.done) {
+    if (def?.standOnMove && res.ok) seatYaw = new THREE.Euler().setFromQuaternion(tmpQuat, "YXZ").y;
+    if (def?.standOnMove && performance.now() - boardedAt > 500 && (jumped || input.move().mag > 0.25)) {
+      leaveRide();
+    } else if (!def || !res.ok || res.done) {
       leaveRide();
       if (def?.doneToast) toast(def.doneToast, 3500);
       sfx.ding();
@@ -1338,7 +1453,7 @@ function frame() {
       }
       const ns = def.netState?.();
       if (ns) netTick(ns.pos, ns.ry, ns.anim, false, DRIVE_SEND_MS);
-      else netTick(sendPos.copy(tmpPos), me.yaw, def.pose(0), true);
+      else netTick(sendPos.copy(tmpPos), me.yaw, withWave(def.pose(0)), true);
 
       if (def.hud) def.hud(res, dt);
       else {
@@ -1368,6 +1483,11 @@ function frame() {
   }
   if (myAvatar && mode !== "darts") myAvatar.group.visible = true;
 
+  // the fountain's water show is starting: tell whoever is around the plaza
+  const showOn = fountain.showPhase(now) >= 0;
+  if (showOn && !showWasOn && joined && !shopCart && (mode === "ride" ? tmpPos : me.pos).lengthSq() < 30 * 30) toast("{fountain} Đài phun nước bắt đầu biểu diễn!", 3000);
+  showWasOn = showOn;
+
   if (Math.abs(camera.fov - fov) > 0.01) {
     camera.fov = fov;
     camera.updateProjectionMatrix();
@@ -1389,7 +1509,10 @@ function frame() {
 
   // remotes
   for (const r of remotes.values()) {
-    let pose: Pose = (["idle", "walk", "run", "jump", "throw"].includes(r.anim) ? r.anim : "idle") as Pose;
+    const waving = r.anim.endsWith("+w");
+    const anim = waving ? r.anim.slice(0, -2) : r.anim;
+    if (waving) r.avatar.wave(performance.now(), 300);
+    let pose: Pose = (["idle", "walk", "run", "jump", "throw"].includes(anim) ? anim : "idle") as Pose;
     let seated = false;
     const def = rideOf(r.ride?.kind);
     if (r.ride && def?.follow) {
@@ -1415,7 +1538,7 @@ function frame() {
       r.yaw = dampAngle(r.yaw, r.targetYaw, 10, dt);
       r.avatar.group.position.copy(r.pos);
       r.avatar.group.rotation.set(0, r.yaw, 0);
-      if (pose === "sit" || pose === "horse" || pose === "cheer") pose = "idle";
+      if (pose === "sit" || pose === "bench" || pose === "horse" || pose === "cheer") pose = "idle";
     }
     showHeld(r.avatar, r.held);
     r.avatar.animate(pose, 1, dt, performance.now());
@@ -1466,7 +1589,8 @@ if (import.meta.env.DEV) {
     get ride() { return myRide; },
     get held() { return myHeld; },
     get wallet() { return wallet; },
-    vendors, openShop: (i: number) => openShop(CARTS[i]), buy, useHeld,
+    vendors, openShop: (i: number) => openShop(CARTS[i]), buy, useHeld, fountain, wish, wave,
+    get wishing() { return wishPending; },
     cartFront: (i: number) => cartFront(CARTS[i]),
     tp(x: number, z: number) { me.pos.set(x, 0, z); },
     /** Jump the shared clock forward (seconds). Local only: the server and other players don't see it. */

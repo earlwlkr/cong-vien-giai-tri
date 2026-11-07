@@ -62,6 +62,8 @@ export interface BoardSpec {
   maxSeats: number;
   /** Stored as `ride.start` (e.g. the departure the seat belongs to). */
   start: number;
+  /** Seat to take if it's free (e.g. the end of the bench you're standing at). */
+  seat?: number;
 }
 
 /**
@@ -72,10 +74,12 @@ export interface RideDef {
   kind: string;
   /** Note in the online-player list, e.g. "tàu lượn". */
   label: string;
-  /** "Where am I" pill area and minimap marker. */
-  place: { name: string; icon: SpriteName; x: number; z: number; r: number };
+  /** "Where am I" pill area and minimap marker (none for things all over the park, like benches). */
+  place?: { name: string; icon: SpriteName; x: number; z: number; r: number };
   /** Stand here to get the boarding prompt. */
   zone: { x: number; z: number; r: number };
+  /** Several boarding spots (e.g. every bench); replaces `zone` for the prompt when set. */
+  zones?: { x: number; z: number; r: number }[];
 
   // ---- world ----
   object: THREE.Object3D;
@@ -134,6 +138,10 @@ export interface RideDef {
     pitch?: [number, number];
     fov?(speed: number): number;
   };
+  /** Exit button text while seated (default "Xuống"). */
+  exitLabel?: string;
+  /** Walking or jumping gets you off (benches). */
+  standOnMove?: boolean;
   /** Your own ride's HUD and sounds, every frame. Without it the ride HUD is hidden. */
   hud?(res: RideResult, dt: number): void;
   doneToast?: string;

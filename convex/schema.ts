@@ -75,11 +75,24 @@ export default defineSchema({
     /** When the current spending cycle started; refills XU_REFILL_MS later. */
     cycleStart: v.number(),
     lastBuy: v.number(),
+    /** Last coin tossed into the fountain (rate limit). */
+    lastWish: v.optional(v.number()),
   }).index("by_token", ["token"]),
+  /**
+   * The plaza fountain, a single row: how many wishes it has had (the coins lying in the basin)
+   * and the latest one, which every client plays (coin toss, splash, burst). Written once per wish.
+   */
+  fountain: defineTable({
+    count: v.number(),
+    last: v.union(
+      v.object({ player: v.id("players"), name: v.string(), x: v.number(), z: v.number(), at: v.number(), lucky: v.boolean() }),
+      v.null(),
+    ),
+  }),
   /**
    * Analytics log, one row per action (see stats.ts): "join" (new visit; `first` = first of the
    * day for this profile), "new" (profile created), "board" (kind = ride), "buy" (kind = item),
-   * "darts" (finished game). Rolled up into `daily` each night; raw rows kept EVENT_DAYS.
+   * "darts" (finished game), "wish" (coin in the fountain). Rolled up into `daily` each night; raw rows kept EVENT_DAYS.
    */
   events: defineTable({
     type: v.string(),
@@ -103,6 +116,7 @@ export default defineSchema({
     boards: v.record(v.string(), v.number()),
     buys: v.record(v.string(), v.number()),
     darts: v.number(),
+    wishes: v.optional(v.number()),
     peakOnline: v.number(),
     /** Rollup still paging through the day's events. */
     partial: v.optional(v.boolean()),

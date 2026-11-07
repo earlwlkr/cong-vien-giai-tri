@@ -24,7 +24,7 @@ const MAX_KEYS = 40;
 export const dayOf = (t: number) => new Date(t + TZ_MS).toISOString().slice(0, 10);
 const dayStart = (day: string) => Date.parse(day + "T00:00:00Z") - TZ_MS;
 
-type EventType = "join" | "new" | "board" | "buy" | "darts";
+type EventType = "join" | "new" | "board" | "buy" | "darts" | "wish";
 export async function logEvent(
   ctx: MutationCtx,
   e: { type: EventType; kind?: string; profile?: Id<"profiles">; first?: boolean },
@@ -33,7 +33,7 @@ export async function logEvent(
 }
 
 type Totals = Omit<Doc<"daily">, "_id" | "_creationTime" | "day" | "partial">;
-const empty = (): Totals => ({ visits: 0, players: 0, newPlayers: 0, boards: {}, buys: {}, darts: 0, peakOnline: 0 });
+const empty = (): Totals => ({ visits: 0, players: 0, newPlayers: 0, boards: {}, buys: {}, darts: 0, wishes: 0, peakOnline: 0 });
 const copy = (t: Totals): Totals => ({ ...t, boards: { ...t.boards }, buys: { ...t.buys } });
 
 /** Convex record keys: ASCII, not starting with "$" or "_". */
@@ -60,6 +60,9 @@ function add(t: Totals, e: Doc<"events">) {
       break;
     case "darts":
       t.darts++;
+      break;
+    case "wish":
+      t.wishes = (t.wishes ?? 0) + 1;
       break;
   }
 }
@@ -172,10 +175,11 @@ export const summary = internalQuery({
         t.peakOnline = await peakOnline(ctx, day);
         note = events.length === LIVE_CAP ? `live, first ${LIVE_CAP} events only` : "live";
       }
-      days.push({ day, ...t, boards: ranked(t.boards), buys: ranked(t.buys), ...(note ? { note } : {}) });
+      days.push({ day, ...t, wishes: t.wishes ?? 0, boards: ranked(t.boards), buys: ranked(t.buys), ...(note ? { note } : {}) });
       sum.visits += t.visits;
       sum.newPlayers += t.newPlayers;
       sum.darts += t.darts;
+      sum.wishes = (sum.wishes ?? 0) + (t.wishes ?? 0);
       sum.peakOnline = Math.max(sum.peakOnline, t.peakOnline);
       for (const [k, c] of Object.entries(t.boards)) sum.boards[k] = (sum.boards[k] ?? 0) + c;
       for (const [k, c] of Object.entries(t.buys)) sum.buys[k] = (sum.buys[k] ?? 0) + c;
@@ -187,6 +191,7 @@ export const summary = internalQuery({
         visits: sum.visits,
         newPlayers: sum.newPlayers,
         darts: sum.darts,
+        wishes: sum.wishes ?? 0,
         peakOnline: sum.peakOnline,
         rides: ranked(sum.boards),
         items: ranked(sum.buys),

@@ -37,13 +37,13 @@ const riding = Object.entries(s.now.riding).map(([k, n]) => `${k} ${n}`).join(",
 console.log(`Công Viên Giải Trí · ${dev ? "dev" : "prod"} · last ${s.range.days} day(s) (Vietnam time)`);
 console.log(`\nNow: ${s.now.online} online${riding ? ` · riding: ${riding}` : ""}`);
 console.log(
-  `Range: ${s.range.visits} visits · ${s.range.newPlayers} new players · peak ${s.range.peakOnline} online · ${s.range.darts} darts games`,
+  `Range: ${s.range.visits} visits · ${s.range.newPlayers} new players · peak ${s.range.peakOnline} online · ${s.range.darts} darts games · ${s.range.wishes ?? 0} fountain wishes`,
 );
 ranking("Rides by boardings", s.range.rides);
 ranking("Food & items sold", s.range.items);
 
 const kinds = Object.keys(s.range.rides);
-const head = ["day", "visits", "players", "new", "peak", "darts", "bought", ...kinds];
+const head = ["day", "visits", "players", "new", "peak", "darts", "wishes", "bought", ...kinds];
 const rows = s.days.map((d) => [
   d.day + (d.note ? "*" : ""),
   d.visits,
@@ -51,6 +51,7 @@ const rows = s.days.map((d) => [
   d.newPlayers,
   d.peakOnline,
   d.darts,
+  d.wishes ?? 0,
   Object.values(d.buys).reduce((a, b) => a + b, 0),
   ...kinds.map((k) => d.boards[k] ?? 0),
 ]);

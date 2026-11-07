@@ -67,6 +67,45 @@ if (!only.length || only.includes("shop")) {
   await shot(p, "shop");
 }
 
+let wished = false;
+if (!only.length || only.includes("fountain")) {
+  // stand at the flower bed south of the fountain and toss a coin
+  await g("G.tp(0, 10.5)");
+  await wait(400);
+  const prompt = (await page.textContent("#prompt"))?.trim();
+  check(/ước/.test(prompt ?? ""), `fountain: wish prompt shows ("${prompt}")`);
+  const [bal0, coins0] = [await g("G.wallet?.balance"), await g("G.fountain.coinCount")];
+  await g("G.interact()");
+  await wait(300);
+  check(await g("G.wishing"), "fountain: wish in flight");
+  await until(() => g("!G.wishing"), 10000, "wish");
+  const bal1 = await g("G.wallet?.balance");
+  check(bal1 === bal0 - 5 || bal1 === bal0 + 25, `fountain: wish paid (${bal0} → ${bal1})`);
+  check((await g("G.fountain.coinCount")) === coins0 + 1, "fountain: coin lands in the basin");
+  wished = true;
+  // the water show, from the plaza
+  await g("G.warp(G.fountain.nextShow(G.serverNow()) + 5)");
+  await g("G.setCam('tp', Math.PI, -0.12)");
+  await wait(1500);
+  check((await g("G.fountain.showPhase(G.serverNow())")) >= 0, "fountain: water show running");
+  await shot(p, "fountain-show");
+}
+
+if (!only.length || only.includes("bench")) {
+  // sit on a bench by the fountain, wave, then walk off
+  await g("(() => { const b = G.benches.list.findIndex((b) => Math.hypot(b.x, b.z) < 12); const f = G.benches.front(b); G.tp(f.x, f.z); })()");
+  await wait(400);
+  await g("G.interact()");
+  check(await until(() => g("G.mode === 'ride' && G.ride?.kind === 'bench'"), 8000, "sit").catch(() => false), "bench: sits down");
+  await page.keyboard.press("KeyG");
+  await wait(900);
+  await shot(p, "bench-sit");
+  await page.keyboard.down("KeyW");
+  check(await until(() => g("G.mode === 'walk'"), 4000, "stand").catch(() => false), "bench: walking stands you up");
+  await wait(300);
+  await page.keyboard.up("KeyW");
+}
+
 // analytics (convex/stats.ts): the visit, every boarding and the purchase were logged
 const after = statsToday();
 check(after.visits > stats0.visits, `stats: visit logged (${stats0.visits} → ${after.visits})`);
@@ -74,6 +113,7 @@ for (const kind of boardedKinds) {
   const [b, a] = [stats0.boards[kind] ?? 0, after.boards[kind] ?? 0];
   check(a > b, `stats: ${kind} boarding logged (${b} → ${a})`);
 }
+if (wished) check((after.wishes ?? 0) > (stats0.wishes ?? 0), "stats: wish logged");
 if (bought) check(Object.values(after.buys).reduce((s, n) => s + n, 0) > Object.values(stats0.buys).reduce((s, n) => s + n, 0), "stats: purchase logged");
 
 await finish();

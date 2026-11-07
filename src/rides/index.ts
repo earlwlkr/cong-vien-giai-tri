@@ -6,6 +6,7 @@ import { BumperCars } from "../world/bumpers";
 import { PirateShip } from "../world/pirateship";
 import { SwingRide } from "../world/swings";
 import { Teacups } from "../world/teacups";
+import { Benches } from "../world/benches";
 import { coasterRide } from "./coaster";
 import { wheelRide } from "./wheel";
 import { carouselRide } from "./carousel";
@@ -14,6 +15,7 @@ import { bumperRide } from "./bumper";
 import { shipRide } from "./ship";
 import { swingRide } from "./swing";
 import { teacupRide } from "./teacup";
+import { benchRide } from "./bench";
 import type { RideDef, RideEnv } from "./types";
 
 export type { Ride, RideDef, RideEnv, RideResult, RemoteView } from "./types";
@@ -29,6 +31,7 @@ export function buildRides(env: RideEnv) {
     ship: new PirateShip(-64, -24),
     swings: new SwingRide(70, -34),
     teacups: new Teacups(-33, 49),
+    benches: new Benches(),
   };
   const list: RideDef[] = [
     coasterRide(env, world.coaster),
@@ -39,6 +42,7 @@ export function buildRides(env: RideEnv) {
     shipRide(env, world.ship),
     swingRide(env, world.swings),
     teacupRide(env, world.teacups),
+    benchRide(env, world.benches),
   ];
   const byKind = new Map(list.map((d) => [d.kind, d]));
   return { list, byKind, world };

@@ -4,6 +4,10 @@
 export const XU_QUOTA = 300;
 /** A wallet tops back up to XU_QUOTA this long after it started spending. */
 export const XU_REFILL_MS = 6 * 60 * 60 * 1000;
+/** A coin tossed into the plaza fountain (convex/fountain.ts). Now and then the fountain pays back. */
+export const WISH_PRICE = 5;
+export const WISH_LUCKY_ODDS = 1 / 12;
+export const WISH_LUCKY_XU = 30;
 
 export type ItemModel =
   | "cone" // ice cream

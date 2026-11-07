@@ -6,7 +6,7 @@ import { posOf } from "./players";
 
 const validToken = (t: string) => /^[A-Za-z0-9-]{16,64}$/.test(t);
 
-async function loadWallet(ctx: MutationCtx, token: string) {
+export async function loadWallet(ctx: MutationCtx, token: string) {
   const w = await ctx.db.query("wallets").withIndex("by_token", (q) => q.eq("token", token)).unique();
   if (w) return w;
   const now = Date.now();
@@ -15,7 +15,7 @@ async function loadWallet(ctx: MutationCtx, token: string) {
 }
 
 /** Applies a pending 6h refill. Wallets that are already full have no running cycle. */
-function refilled(w: { balance: number; cycleStart: number }, now: number) {
+export function refilled(w: { balance: number; cycleStart: number }, now: number) {
   if (w.balance < XU_QUOTA && now - w.cycleStart >= XU_REFILL_MS) return { balance: XU_QUOTA, cycleStart: now };
   return { balance: w.balance, cycleStart: w.cycleStart };
 }

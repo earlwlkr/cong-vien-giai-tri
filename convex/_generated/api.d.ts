@@ -11,6 +11,7 @@
 import type * as catalog from "../catalog.js";
 import type * as chat from "../chat.js";
 import type * as crons from "../crons.js";
+import type * as fountain from "../fountain.js";
 import type * as looks from "../looks.js";
 import type * as players from "../players.js";
 import type * as scores from "../scores.js";
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   catalog: typeof catalog;
   chat: typeof chat;
   crons: typeof crons;
+  fountain: typeof fountain;
   looks: typeof looks;
   players: typeof players;
   scores: typeof scores;

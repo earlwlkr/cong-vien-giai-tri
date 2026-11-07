@@ -11,6 +11,7 @@
     "e2e": "node e2e/smoke.mjs",
     "e2e:bumper": "node e2e/bumper-mp.mjs",
     "e2e:ride-sync": "node e2e/ride-sync.mjs",
+    "e2e:plaza": "node e2e/plaza-mp.mjs",
     "stats": "node scripts/stats.mjs",
     "stats:dev": "node scripts/stats.mjs --dev"
   },
