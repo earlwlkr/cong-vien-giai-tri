@@ -516,6 +516,22 @@ $("soundBtn").addEventListener("click", () => {
   sfx.init();
   setRich($("soundBtn"), sfx.toggle() ? "{sound}" : "{mute}");
 });
+// background music: on by default, the choice is remembered
+const MUSIC_KEY = "cvgt-music";
+function applyMusicBtn() {
+  setRich($("musicBtn"), sfx.musicOn ? "{music}" : "{nomusic}");
+  $("musicBtn").title = sfx.musicOn ? "Tắt nhạc nền (M)" : "Bật nhạc nền (M)";
+}
+function toggleMusic() {
+  sfx.init();
+  sfx.setMusicOn(!sfx.musicOn);
+  localStorage.setItem(MUSIC_KEY, sfx.musicOn ? "1" : "0");
+  applyMusicBtn();
+  toast(sfx.musicOn ? "{music} Đã bật nhạc nền" : "{nomusic} Đã tắt nhạc nền", 1200);
+}
+sfx.setMusicOn(localStorage.getItem(MUSIC_KEY) !== "0");
+applyMusicBtn();
+$("musicBtn").addEventListener("click", toggleMusic);
 $("jumpBtn").addEventListener("pointerdown", (e) => {
   e.preventDefault();
   input.jumpQueued = true;
@@ -554,6 +570,7 @@ input.onKey = (code) => {
   if (code === "KeyF") useHeld();
   else if (code === "KeyV") toggleCam();
   else if (code === "KeyG") wave();
+  else if (code === "KeyM") toggleMusic();
   else if (code === "KeyR") toggleReactBar();
   else if (/^(Digit|Numpad)[1-9]$/.test(code)) react(+code.slice(-1) - 1);
   else if (code === "KeyE") interact();
@@ -1623,6 +1640,8 @@ function frame() {
   const lp = mode === "ride" ? tmpPos : me.pos;
   const dMusic = music ? Math.hypot(lp.x - music.x, lp.z - music.z) : Infinity;
   sfx.setMusic(joined ? Math.max(0, Math.min(1, 1 - (dMusic - 6) / 35)) : 0);
+  // park tune: quieter on the join screen and while riding (wind and screams take over)
+  sfx.setBgm(!joined ? 0.6 : mode === "ride" ? 0.55 : 1);
 
   // where am I
   if (joined && frameNo % 15 === 0) {
@@ -1662,7 +1681,7 @@ if (import.meta.env.DEV) {
     get ride() { return myRide; },
     get held() { return myHeld; },
     get wallet() { return wallet; },
-    vendors, openShop: (i: number) => openShop(CARTS[i]), buy, useHeld, fountain, wish, wave, react,
+    vendors, openShop: (i: number) => openShop(CARTS[i]), buy, useHeld, fountain, wish, wave, react, sfx, toggleMusic,
     get wishing() { return wishPending; },
     cartFront: (i: number) => cartFront(CARTS[i]),
     tp(x: number, z: number) { me.pos.set(x, 0, z); },

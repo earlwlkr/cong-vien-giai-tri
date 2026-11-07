@@ -20,7 +20,7 @@ Lần đầu vào, bạn đặt tên và tự chọn nhân vật (kiểu tóc/m�
 
 - ❤️ **Thả cảm xúc** – tim, thích, haha, wow, buồn, ăn mừng bay lên trên đầu nhân vật cho mọi người cùng thấy (`R` / phím `1`–`6` / nút trái tim), cả khi đang ngồi trò chơi
 
-Có góc nhìn thứ nhất / thứ ba, chat với bong bóng trên đầu nhân vật (tin nhắn tự ẩn, người mới vào chỉ thấy tin của vài phút gần đây), minimap, và điều khiển cảm ứng cho điện thoại.
+Có góc nhìn thứ nhất / thứ ba, chat với bong bóng trên đầu nhân vật (tin nhắn tự ẩn, người mới vào chỉ thấy tin của vài phút gần đây), minimap, nhạc nền vui tươi tự soạn (nhỏ dần khi lại gần vòng ngựa gỗ; tắt / bật bằng phím `M` hoặc nút nốt nhạc, lựa chọn được nhớ theo thiết bị), và điều khiển cảm ứng cho điện thoại.
 
 ## Điều khiển
 
@@ -30,7 +30,7 @@ Có góc nhìn thứ nhất / thứ ba, chat với bong bóng trên đầu nhân
 | Kéo chuột: xoay góc nhìn · lăn chuột: zoom | Kéo nửa phải: xoay góc nhìn |
 | `V`: đổi góc nhìn · `E`: chơi / ngồi / ước · `Q`: rời trò chơi | 👁 đổi góc nhìn · 💬 chat · ✋ vẫy tay · ❤️ thả cảm xúc |
 | `G`: vẫy tay · `R` / `1`–`6`: thả cảm xúc | |
-| `Enter`: chat | |
+| `Enter`: chat · `M`: bật / tắt nhạc nền | 🎵 bật / tắt nhạc nền |
 
 ## Công nghệ
 

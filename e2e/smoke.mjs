@@ -106,6 +106,28 @@ if (!only.length || only.includes("bench")) {
   await page.keyboard.up("KeyW");
 }
 
+if (!only.length || only.includes("music")) {
+  // background tune plays in the park; M / the note button switch it off and the choice sticks
+  await g("G.tp(0, 30)");
+  await page.keyboard.press("KeyW"); // a key press: the audio context may start
+  const step0 = await g("G.sfx.bgmStep");
+  await wait(1500);
+  check(await g("G.sfx.ctx?.state === 'running'"), "music: audio running");
+  check(await g("G.sfx.musicOn"), "music: on by default");
+  check((await g("G.sfx.bgmStep")) > step0, "music: background tune is playing");
+  check((await g("G.sfx.bgmGain.gain.value")) > 0.01, "music: background tune audible");
+  await page.keyboard.press("KeyM");
+  await wait(2500);
+  check(!(await g("G.sfx.musicOn")), "music: M turns it off");
+  check((await g("G.sfx.bgmGain.gain.value")) < 0.005, "music: background tune silent");
+  check(await g("localStorage.getItem('cvgt-music') === '0'"), "music: choice saved");
+  check(await g("document.getElementById('musicBtn').children.length > 0"), "music: button has an icon");
+  await shot(p, "music-off");
+  await page.click("#musicBtn");
+  await wait(300);
+  check(await g("G.sfx.musicOn && localStorage.getItem('cvgt-music') === '1'"), "music: button turns it back on");
+}
+
 // analytics (convex/stats.ts): the visit, every boarding and the purchase were logged
 const after = statsToday();
 check(after.visits > stats0.visits, `stats: visit logged (${stats0.visits} → ${after.visits})`);

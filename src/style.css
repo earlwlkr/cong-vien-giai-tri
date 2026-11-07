@@ -102,7 +102,7 @@ body.touch #exitBtn { bottom: calc(110px + env(safe-area-inset-bottom)); }
 
 /* ---- on a ride: minimal HUD ---- */
 body.riding #useBtn { bottom: calc(16px + env(safe-area-inset-bottom)); }
-body.riding #where, body.riding #minimap, body.riding #soundBtn, body.riding #editBtn, body.riding #jumpBtn,
+body.riding #where, body.riding #minimap, body.riding #soundBtn, body.riding #musicBtn, body.riding #editBtn, body.riding #jumpBtn,
 body.riding #stick, body.riding #board, body.riding #prompt { display: none !important; }
 /* the ride's exit button is moved into #topLeft (setRidingUI) so it stacks under the pills instead of overlapping them */
 body.riding #wallet { display: none; }
