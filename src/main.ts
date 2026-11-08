@@ -103,7 +103,7 @@ const rideEnv: RideEnv = {
   myAvatar: () => myAvatar,
   remotes: () => remotes.entries(),
   takenSeats(kind) {
-    const now = serverNow(), taken = new Set<number>();
+    const now = wallNow(), taken = new Set<number>();
     for (const p of latestPlayers) if (p._id !== myId && p.ride?.kind === kind && now - p.lastSeen < 20000) taken.add(keyIndex(p.ride.key));
     return taken;
   },
@@ -228,6 +228,8 @@ let timeOffset = 0;
 /** DEV only (__game.warp): pretend time has moved on, so tests don't wait out ride schedules. */
 let warpMs = 0;
 const serverNow = () => Date.now() + timeOffset + warpMs;
+/** Server wall clock without the DEV ride-clock warp: for lastSeen (online) checks. */
+const wallNow = () => Date.now() + timeOffset;
 interface Remote {
   avatar: Avatar;
   pos: THREE.Vector3;
@@ -259,7 +261,7 @@ function mergedPlayers(): PlayerDoc[] {
 
 function syncRemotes(list: PlayerDoc[]) {
   latestPlayers = list;
-  const now = serverNow();
+  const now = wallNow();
   const seen = new Set<string>();
   for (const p of list) {
     if (p._id === myId) continue;
@@ -325,7 +327,7 @@ let playerListOpen = false;
 function renderPlayerList() {
   const el = $("playerList");
   el.innerHTML = "";
-  const now = serverNow();
+  const now = wallNow();
   const rows = [{ name: myName, color: myColor, me: true, note: "bạn" }];
   const others = latestPlayers
     .filter((p) => p._id !== myId && now - p.lastSeen <= 20000)

@@ -48,9 +48,13 @@ const LOWER = {
   wheel: ["Vòng quay mặt trời", "12 cabin · ngắm toàn cảnh công viên"],
   carousel: ["Vòng ngựa gỗ", "Có nhạc, có bạn bè"],
   bumper: ["Xe điện đụng", "Tự lái · đụng xe với người chơi khác"],
-  plaza: ["Đi dạo, trò chuyện", "Kem, bắp rang, nước mía, bánh mì, bóng bay…"],
+  plaza: ["Phố ẩm thực", "Kem, bắp rang, nước mía, bánh mì, bóng bay…"],
   darts: ["Ném phi tiêu", "45 giây · bảng xếp hạng chung"],
-  together: ["Chơi cùng mọi người", "Ai vào công viên cũng thấy nhau, cùng một chuyến tàu"],
+  ship: ["Thuyền hải tặc", "16 ghế · lắc tới 70°"],
+  swing: ["Đu quay bay", "16 ghế treo · văng ra 60° · 48 km/h"],
+  teacups: ["Tách trà xoay", "6 tách · càng xoay càng chóng mặt"],
+  fountain: ["Đài phun nước", "Phun nước biểu diễn mỗi 90 giây · thả xu ước một điều"],
+  together: ["Chơi cùng mọi người", "Ngồi ghế đá, vẫy tay, thả tim cho nhau"],
 };
 for (const [k, [t, s]] of Object.entries(LOWER)) {
   cards["lower-" + k] = `<style>${BASE}

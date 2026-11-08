@@ -2,7 +2,7 @@
 // promo/out/ (see shots.mjs, edit.mjs). Small files: 720p/540p H.264, no audio, JPEG stills.
 //   node promo/web.mjs
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,6 +11,7 @@ const OUT = process.env.PROMO_OUT ?? path.join(root, "promo", "out");
 const FINAL = path.join(OUT, "final");
 const DEST = path.join(root, "public", "gioi-thieu", "media");
 const FONTS = process.env.PROMO_FONTS ?? path.join(root, "..", "promo-fonts");
+rmSync(DEST, { recursive: true, force: true }); // no stale clips or stills from an older shot list
 mkdirSync(DEST, { recursive: true });
 
 function ff(args) {
@@ -20,7 +21,7 @@ function ff(args) {
 const H264 = (crf) => ["-c:v", "libx264", "-preset", "slow", "-crf", String(crf), "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an"];
 
 // trailer, 720p
-ff(["-i", path.join(FINAL, "trailer.mp4"), "-vf", "scale=1280:720:flags=lanczos", ...H264(29), path.join(DEST, "trailer.mp4")]);
+ff(["-i", path.join(FINAL, "trailer.mp4"), "-vf", "scale=1280:720:flags=lanczos", ...H264(31), path.join(DEST, "trailer.mp4")]);
 ff(["-ss", "5.5", "-i", path.join(FINAL, "trailer.mp4"), "-frames:v", "1", "-vf", "scale=1280:720:flags=lanczos", "-q:v", "3", path.join(DEST, "trailer-poster.jpg")]);
 
 // hero background loop (already 720p and small)
@@ -32,11 +33,14 @@ copyFileSync(path.join(FINAL, "og-image.png"), path.join(DEST, "og-image.png"));
 const CLIPS = [
   ["coaster", "coaster-pov", 1.2, 6],
   ["drop", "drop-pov", 1.5, 6],
+  ["ship", "ship", 2, 6],
+  ["swing", "swing", 3, 6],
   ["wheel", "wheel-top", 0.5, 6],
   ["carousel", "carousel", 1, 6],
+  ["teacups", "teacups", 1, 6],
   ["bumper", "bumper", 1, 6],
   ["darts", "darts", 0, 5.5],
-  ["plaza", "plaza", 0.3, 9],
+  ["fountain", "fountain", 0.5, 10],
 ];
 for (const [name, shot, ss, t] of CLIPS) {
   const src = path.join(OUT, shot + ".mp4");
@@ -45,7 +49,7 @@ for (const [name, shot, ss, t] of CLIPS) {
 }
 
 // gallery stills: 1600 wide JPEG
-const GALLERY = ["intro", "gate", "coaster", "coaster-riders", "drop-ground", "wheel", "wheel-top", "plaza"];
+const GALLERY = ["intro", "gate", "coaster", "coaster-riders", "drop-ground", "ship", "swing", "teacups", "wheel-top", "fountain", "plaza", "outro"];
 for (const n of GALLERY) {
   ff(["-i", path.join(FINAL, `still-${n}.png`), "-vf", "scale=1600:-2:flags=lanczos", "-q:v", "3", path.join(DEST, `still-${n}.jpg`)]);
 }

@@ -2,7 +2,7 @@
 //   node promo/shots.mjs                 all shots
 //   node promo/shots.mjs coaster drop    only some
 //   PREVIEW=1 node promo/shots.mjs wheel only saves first/middle/last frame (fast framing check)
-import { bots, cine, clearChat, done, record as rec, shot, step, ui, viewer, wait, walker, FPS } from "./lib.mjs";
+import { bots, cine, clearChat, done, record as rec, shot, step, ui, viewer, wait, walker, FPS, W, H } from "./lib.mjs";
 
 const only = process.argv.slice(2);
 const want = (k) => !only.length || only.includes(k);
@@ -35,7 +35,7 @@ async function record(name, sec, opts = {}) {
 }
 
 // ------------------------------------------------------------------ crowd
-const B = await bots.spawn(14, (k) => ({ x: -6 + (k % 7) * 2, z: 30 + Math.floor(k / 7) * 3 }));
+const B = await bots.spawn(18, (k) => ({ x: -6 + (k % 9) * 1.5, z: 30 + Math.floor(k / 9) * 3 }));
 // a few of them buy things to carry around
 const buys = [
   [0, "bongbay", "bong_do", -25, -5.6], [1, "kem", "kem_dau", -6.4, 40], [2, "bongbay", "bong_vang", -25, -5.6],
@@ -60,18 +60,22 @@ function ambient() {
   const plans = [
     walker(ring(13, 0), { speed: 1.5 }),
     walker([[-2.5, 88], [-2.5, 20], [2.5, 20], [2.5, 88], [-2.5, 88]], { speed: 1.7, t0: -10 }),
-    walker(ring(16, 2, -1), { speed: 1.4 }),
+    walker(ring(15.2, 2, -1), { speed: 1.4 }),
     walker([[2.5, 20], [2.5, 88], [-2.5, 88], [-2.5, 20], [2.5, 20]], { speed: 1.6, t0: -30 }),
-    walker(ring(11, 4), { speed: 1.3 }),
+    walker(ring(12.6, 4), { speed: 1.3 }),
     walker([[-1.5, 75], [-1.5, 22], [1.5, 22], [1.5, 75], [-1.5, 75]], { speed: 1.5, t0: -5 }),
-    walker(ring(15, 1, -1), { speed: 1.6 }),
+    walker(ring(14.4, 1, -1), { speed: 1.6 }),
     walker([[1.8, 30], [1.8, 70], [-1.8, 70], [-1.8, 30], [1.8, 30]], { speed: 1.4 }),
     walker([[-14, -14], [-30, -30], [-14, -14]], { speed: 1.5 }),
     walker([[14, -14], [30, -32], [14, -14]], { speed: 1.5 }),
-    walker([[14, 8], [40, 16], [14, 8]], { speed: 1.5 }),
-    walker([[-14, 8], [-40, 14], [-14, 8]], { speed: 1.5 }),
-    walker([[-1.4, -12], [-1.4, -26], [-1.4, -12]], { speed: 1.4 }),
+    walker([[19, 6], [40, 13.5], [19, 6]], { speed: 1.5 }),
+    walker([[-19, 6], [-40, 18.5], [-19, 6]], { speed: 1.5 }),
+    walker([[-1.4, -19], [-1.4, -30], [-1.4, -19]], { speed: 1.4 }),
     walker([[-2, 40], [-2, 90], [-2, 40]], { speed: 1.8 }),
+    walker([[-19, -8.5], [-42, -19], [-19, -8.5]], { speed: 1.5, t0: -6 }),
+    walker([[19, -9.2], [42, -20.5], [19, -9.2]], { speed: 1.5, t0: -12 }),
+    walker([[-12, 18], [-23, 34.5], [-12, 18]], { speed: 1.4 }),
+    walker(ring(13.8, 3), { speed: 1.5 }),
   ];
   for (const b of B) {
     b.ride = null;
@@ -97,9 +101,9 @@ async function leaveRide() {
   }
 }
 /** Seconds from now (serverNow) until the viewer's ride first satisfies `cond(res)` (JS expr on r). */
-const findTime = (cond, from = 0, to = 120) =>
-  g(`(() => { const d = G.rides.get(G.ride.kind), P = G.camera.position.clone(), Q = G.camera.quaternion.clone(), n = G.serverNow();
-    for (let s = ${from}; s < ${to}; s += 1 / 30) { const r = d.seatPose(G.ride, n + s * 1000, P, Q); if (${cond}) return s; } return null; })()`);
+const findTime = (cond, from = 0, to = 120, ride = "G.ride") =>
+  g(`(() => { const R = ${ride}, d = G.rides.get(R.kind), P = G.camera.position.clone(), Q = G.camera.quaternion.clone(), n = G.serverNow();
+    for (let s = ${from}; s < ${to}; s += 1 / 30) { const r = d.seatPose(R, n + s * 1000, P, Q); if (${cond}) return s; } return null; })()`);
 
 async function boardScheduled(kind, botSeats) {
   await leaveRide();
@@ -141,7 +145,7 @@ const SHOTS = {
     await ui(v, { clean: false, chat: false });
     await cine(v, null);
     await g("G.setCam('fp', 0, -0.32)");
-    const crest = await findTime("!r.lift && r.waiting <= 0 && r.speed > 0 && d.seatPose(G.ride, n + (s - 1) * 1000, P, Q).lift");
+    const crest = await findTime("!r.lift && r.waiting <= 0 && r.speed > 0 && d.seatPose(R, n + (s - 1) * 1000, P, Q).lift");
     console.log("coaster crest in", crest?.toFixed(1), "s");
     await g(`G.warp(${crest - 1.3})`);
     await step(v, 3);
@@ -151,6 +155,7 @@ const SHOTS = {
     await g(`G.warp(${-13.1 - 1})`);
     await g("G.setCam('tp', 0, -0.2)");
     await ui(v, { clean: true });
+    const myRide = await g("JSON.stringify(G.ride)"); // the ride can end (G.ride clears) before the loop take
     const last = await g(`JSON.stringify({ ...G.ride, seat: 9 })`);
     await cine(v, `C.follow({ kind: 'coaster', ride: ${last}, off: [0, 4.5, -9], look: [0, 0.5, 8], fov: 62, smooth: 5 })`);
     await step(v, 3);
@@ -158,7 +163,7 @@ const SHOTS = {
 
     // wide: the train screams through the loop
     await g(`G.warp(${-12.1})`);
-    const loopAt = await findTime("r.speed > 0 && P.x > 0 && P.y > 10", 0, 40);
+    const loopAt = await findTime("r.speed > 0 && P.x > 0 && P.y > 10", 0, 40, myRide);
     console.log("loop in", loopAt?.toFixed(1));
     await g(`G.warp(${loopAt - 3})`);
     await cine(v, `C.path({ pos: [[30, 6, -80], [27, 6.5, -81]], look: [[6, 12, -97], [4, 11, -97]], dur: 6, fov: 50, ease: false })`);
@@ -183,7 +188,7 @@ const SHOTS = {
     await step(v, 3);
     await record("drop-pov", 9, { stills: [40, 120] });
 
-    await g(`G.warp(${-(9 + 3 / FPS) + 3.5 - 6})`); // back to 6 s before the fall
+    await g(`G.warp(${-(9 + 3 / FPS) + 3.5 - 3.7})`); // back to ~6 s before the fall (measured: the take runs ~2.3 s behind the POV)
     await g("G.setCam('tp', 0, -0.2)");
     await ui(v, { clean: true });
     await cine(v, `C.track({ pos: [0.2, 1.4, -26], kind: 'drop', ride: ${myRide}, fov: 62, lookOff: [0, 3, 0], smooth: 4 })`);
@@ -322,7 +327,7 @@ const SHOTS = {
     await ui(v, { clean: false, chat: false });
     await step(v, 15);
     const cols = [0.32, 0.40, 0.47, 0.54, 0.61, 0.68], rows = [0.32, 0.43, 0.54, 0.66];
-    const aims = [[2, 1], [4, 2], [1, 3], [3, 0], [5, 1], [0, 2], [2, 3], [4, 0], [3, 2], [1, 1], [5, 3], [0, 0]].map(([c, r]) => [cols[c] * 1920, rows[r] * 1080]);
+    const aims = [[2, 1], [4, 2], [1, 3], [3, 0], [5, 1], [0, 2], [2, 3], [4, 0], [3, 2], [1, 1], [5, 3], [0, 0]].map(([c, r]) => [cols[c] * W, rows[r] * H]);
     await record("darts", 6, {
       stills: [100],
       async onFrame(i) {
@@ -331,6 +336,136 @@ const SHOTS = {
       },
     });
     await page.keyboard.press("KeyQ");
+  },
+
+  /** Pirate ship: first person at one end through the big swings, then wide from above the fence. */
+  async ship() {
+    ambient();
+    // bots everywhere but seat 1 (back row), which the viewer takes
+    const seats = Array.from({ length: 16 }, (_, s) => s).filter((s) => s !== 1);
+    await boardScheduled("ship", seats.slice(0, 14).map((s, j) => [j, s]));
+    console.log("ship seat", await g("G.ride.seat"));
+    await ui(v, { clean: false, chat: false });
+    await cine(v, null);
+    const big = await findTime("r.phase === 'swing' && Math.abs(r.angle) > 1.0");
+    console.log("ship big swing in", big?.toFixed(1));
+    await g(`G.warp(${big - 2.5})`);
+    await g("G.setCam('fp', 0, -0.12)");
+    await step(v, 3);
+    await record("ship-pov", 8, { stills: [75, 160] });
+
+    await g(`G.warp(${-(8 + 3 / FPS) - 1})`);
+    await g("G.setCam('tp', 0, -0.2)");
+    await ui(v, { clean: true });
+    await cine(v, `C.path({ pos: [[-41, 13, -14], [-40, 12.5, -32]], look: [[-64, 6, -22], [-64, 6, -26]], dur: 9, fov: 55, ease: false })`);
+    await step(v, 2);
+    await record("ship", 9, { stills: [80, 170] });
+    await cine(v, null);
+    await leaveRide();
+    await unboardAll();
+  },
+
+  /** Chair swing ride: lift-off from the ground, then flying out over the park. */
+  async swing() {
+    ambient();
+    await boardScheduled("swing", Array.from({ length: 15 }, (_, j) => [j, j + 1]));
+    await ui(v, { clean: true });
+    await cine(v, null);
+    const spin = await findTime("r.phase === 'spin'");
+    const top = await g(`(() => { const d = G.rides.get('swing'), P = G.camera.position.clone(), Q = G.camera.quaternion.clone(); const r = d.seatPose(G.ride, G.serverNow() + (${spin} + 20) * 1000, P, Q); return { kmh: r.speed * 3.6, h: r.height, deg: r.angle * 180 / Math.PI }; })()`);
+    console.log("swing spins in", spin?.toFixed(1), "full speed:", JSON.stringify(top));
+    await g(`G.warp(${spin + 2})`);
+    await cine(v, `C.orbit({ c: [70, 0, -34], r: 22, r2: 18.5, h: 1.8, h2: 3.2, a0: -0.18, a1: 0.3, dur: 9, lookY: 7.5, fov: 58 })`);
+    await step(v, 2);
+    await record("swing", 9, { stills: [150, 260] });
+
+    // full speed, from under the canopy: chairs flying round overhead
+    await g(`G.warp(${12 - 9 - 2 / FPS})`);
+    await cine(v, `C.path({ pos: [[72.5, 1.3, -27.5], [71.8, 1.6, -28.6]], look: [[70, 11, -34], [69.4, 11.5, -34]], dur: 7, fov: 72, ease: false })`);
+    await step(v, 3);
+    await record("swing-under", 7, { stills: [100] });
+    await cine(v, null);
+    await leaveRide();
+    await unboardAll();
+  },
+
+  /** Teacups: friends spinning in every cup. */
+  async teacups() {
+    ambient();
+    await leaveRide();
+    const now = await g("G.serverNow()");
+    const start = now - 6000; // already spinning
+    for (let j = 0; j < 15; j++) await bots.board(B[j], "teacup", `teacup:${j % 6}`, 4, start, Math.floor(j / 6));
+    await g("G.tp(-33, 41.5)");
+    await step(v, 3);
+    await g("G.interact()");
+    await waitFor("G.mode === 'ride'");
+    await ui(v, { clean: true });
+    await step(v, 30);
+    await cine(v, `C.orbit({ c: [-33, 0, 49], r: 15.5, r2: 12.5, h: 5, h2: 3.4, a0: 0.75, a1: 1.6, dur: 9, lookY: 1.2, fov: 52 })`);
+    await step(v, 2);
+    await record("teacups", 9, { stills: [140, 250] });
+    await cine(v, null);
+    await leaveRide();
+    await unboardAll();
+  },
+
+  /** Plaza fountain: the water show, friends on the benches waving, reactions, coins tossed for a wish. */
+  async fountain() {
+    await leaveRide();
+    ambient();
+    const benches = await g("G.benches.list.map(b => ({ x: b.x, z: b.z }))");
+    const now = await g("G.serverNow()");
+    // benches 3 (east) and 4 (west) face the basin, so the camera (south-east) sees faces
+    const sit = [[0, 4, 0], [1, 4, 1], [2, 3, 0], [3, 3, 1]]; // [bot, bench, seat]
+    for (const [bi, bench, seat] of sit) await bots.board(B[bi], "bench", `bench:${bench}`, 2, now, seat), (B[bi].anim = "bench");
+    // friends chatting near the camera, and a few round the far side of the basin
+    const cam = [9, 17];
+    const face = (x, z, tx, tz) => Math.atan2(tx - x, tz - z);
+    const stand = [
+      [5, 3.6, 8.2, cam], [6, 5.6, 6.6, [3.6, 8.2]], [7, 2.0, 6.4, cam], // group by the rim
+      [8, -4.5, -5.0, [0, 0]], [9, 1.5, -6.6, [0, 0]], [10, -6.3, -1.0, [0, 0]],
+    ];
+    for (const [bi, x, z, [tx, tz]] of stand) Object.assign(B[bi], { walk: null, ride: null, x, z, ry: face(x, z, tx, tz), anim: "idle" });
+    await g("G.tp(16, 26)");
+    await ui(v, { clean: true });
+    await clearChat(v);
+    // start just before the water show
+    const show = await g("G.fountain.nextShow(G.serverNow())");
+    if (show > 0) await g(`G.warp(${show - 1.2})`);
+    console.log("benches near camera:", JSON.stringify(sit.map(([, b]) => benches[b])));
+    await step(v, 20);
+    await cine(v, `C.path({ pos: [[10.5, 3.4, 18.5], [7.6, 2.5, 14.2]], look: [[-0.5, 2.2, 0], [-0.5, 1.9, 0]], dur: 11, fov: 55, ease: false })`);
+    let rn = 0;
+    const react = (b, kind) => (b.anim = `idle+r${kind}${rn++ % 10}`);
+    const events = [
+      [20, () => bots.wish(B[5])],
+      [45, () => react(B[7], 0)],
+      [70, () => (B[2].anim = "bench+w")],
+      [95, () => react(B[6], 2)],
+      [140, () => (B[2].anim = "bench")],
+      [150, () => bots.wish(B[9])],
+      [175, () => react(B[5], 5)],
+      [200, () => (B[0].anim = "bench+w")],
+      [230, () => react(B[7], 3)],
+      [250, () => bots.wish(B[7])],
+      [270, () => (B[0].anim = "bench")],
+      [280, () => react(B[6], 0)],
+    ];
+    // a reaction shows while its flag is on the stream: clear it after ~2 s
+    await record("fountain", 11, {
+      stills: [120, 230],
+      async onFrame(i) {
+        for (const [at, fn] of events) if (i === at) {
+          const r = fn();
+          if (r?.then) r.then((x) => !x?.ok && console.log("wish failed", JSON.stringify(x)));
+          for (const b of B) if (/\+r\d\d$/.test(b.anim) && !b.reactAt) b.reactAt = i;
+        }
+        for (const b of B) if (b.reactAt && i - b.reactAt > 55) { b.anim = b.anim.replace(/\+r\d\d$/, ""); b.reactAt = 0; }
+      },
+    });
+    await cine(v, null);
+    for (const [bi] of sit) await bots.unboard(B[bi], B[bi].x, B[bi].z);
   },
 
   /** Outro: high orbit over the whole park. */

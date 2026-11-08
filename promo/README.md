@@ -13,7 +13,8 @@ Renders trailer footage of the real game, frame by frame, against a **local** Co
   re-records one take and plays through the others.
 - `cards.mjs`: title, caption and end-card overlays (Be Vietnam Pro, OFL; set `PROMO_FONTS`).
   `node promo/cards.mjs og <png> <out>` makes the 1200×630 link preview.
-- `edit.mjs`: cuts `out/final/` (trailer, teaser, tweet clips, landing-page hero loop) with ffmpeg.
+- `edit.mjs`: cuts `out/final/` (trailer, teaser, tweet clips, landing-page hero loop, named stills)
+  with ffmpeg.
 - `web.mjs`: web-sized copies (720p trailer, short ride clips, JPEG stills, fonts) into
   `public/gioi-thieu/media/` for the landing page at `/gioi-thieu/` (`public/gioi-thieu/index.html`,
   plain static HTML and CSS, copied into `dist/` as is).
@@ -21,4 +22,7 @@ Renders trailer footage of the real game, frame by frame, against a **local** Co
   the way X counts them (letters with diacritics count 2).
 
 Needs `ffmpeg` and Chromium. Reuse a running dev server with `E2E_URL=http://127.0.0.1:5173/`.
-Rendering everything takes about 40 min.
+Bots get fresh accounts each run (full Xu wallets for buying and wishing). Run each shot in its own
+process (`for s in intro coaster …; do node promo/shots.mjs $s; done`): one long browser session can
+crash. Don't edit `src/` while a render runs: Vite reloads the page and the take fails. Rendering
+everything takes about an hour.

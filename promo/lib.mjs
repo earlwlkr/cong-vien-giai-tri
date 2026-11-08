@@ -218,6 +218,8 @@ export const BOT_NAMES = ["Minh", "Lan", "Huy", "Thảo", "Bảo", "Ngọc", "Kh
  * or a ride. Positions are sent on virtual time, so they line up with the recorded frames.
  */
 const BOT_HEARTBEAT_MS = 5000;
+// fresh bot accounts each run, so their Xu wallets start full (buying and wishing spend Xu)
+const RUN_ID = Date.now().toString(36);
 export const bots = {
   list: [],
   vt: 0, // virtual seconds since bots were spawned
@@ -226,7 +228,7 @@ export const bots = {
     const made = await Promise.all(Array.from({ length: n }, async (_, k) => {
       const i = this.list.length + k;
       const name = BOT_NAMES[i % BOT_NAMES.length];
-      const token = `promo-bot-${String(i).padStart(2, "0")}-xxxxxxxxxxxx`;
+      const token = `promo-bot-${String(i).padStart(2, "0")}-${RUN_ID}`;
       const look = { style: LOOKS[(i * 3) % 5], skin: (i * 5) % 6, hair: (i * 3 + 1) % 8, shoes: i % 5 };
       await convex.mutation(api.players.saveProfile, { token, name, color: COLORS[(i * 7) % COLORS.length], look });
       const p = place(k);
@@ -276,6 +278,8 @@ export const bots = {
     Object.assign(b, { x, z, ry, anim, walk: null });
   },
   say: (b, text) => convex.mutation(api.chat.send, { id: b.id, text }),
+  /** Toss a coin into the plaza fountain (the bot must stand within 13 m of it). */
+  wish: (b) => convex.mutation(api.fountain.wish, { id: b.id, token: b.token }),
   async buy(b, cart, item) {
     return convex.mutation(api.shop.buy, { id: b.id, token: b.token, cart, item });
   },

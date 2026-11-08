@@ -20,6 +20,14 @@ let server, browser;
  * Local Convex + a Vite dev server on a free-ish port pointed at it; resolves with the game URL.
  * Reuse a running server with E2E_URL=http://127.0.0.1:5173/ (it keeps whatever Convex it uses).
  */
+export function stopServer() {
+  if (!server) return;
+  try {
+    process.kill(-server.pid, "SIGTERM");
+  } catch {}
+  server = null;
+}
+
 export async function startServer() {
   if (process.env.E2E_URL) return process.env.E2E_URL;
   const { url: convexUrl, local } = await startConvex();
@@ -30,7 +38,10 @@ export async function startServer() {
     cwd: root,
     stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, VITE_CONVEX_URL: convexUrl },
+    detached: true, // own process group: stopServer() takes down vite too, not just npx
   });
+  // never leave a dev server behind (promo runs exit without finish())
+  process.on("exit", stopServer);
   await new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error("vite did not start")), 30000);
     server.stdout.on("data", (d) => String(d).includes("Local:") && (clearTimeout(t), resolve()));
@@ -95,7 +106,7 @@ export function check(ok, msg) {
 /** Closes everything; exits non-zero if any check failed or a page threw. */
 export async function finish() {
   await browser?.close();
-  server?.kill();
+  stopServer();
   stopConvex();
   if (errors.length) {
     console.log("\n" + errors.join("\n"));
@@ -108,7 +119,7 @@ export async function finish() {
 process.on("unhandledRejection", async (e) => {
   console.error(e);
   await browser?.close();
-  server?.kill();
+  stopServer();
   stopConvex();
   process.exit(1);
 });

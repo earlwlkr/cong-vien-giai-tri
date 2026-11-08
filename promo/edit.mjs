@@ -1,11 +1,12 @@
 // Cuts the recorded shots (promo/shots.mjs) and cards (promo/cards.mjs) into finished videos:
-//   trailer.mp4   ~1 min, captions + title + end card
-//   teaser.mp4    ~20 s for a tweet
+//   trailer.mp4   ~1.5 min, captions + title + end card
+//   teaser.mp4    ~30 s for a tweet
 //   tweet-*.mp4   single shots with a corner watermark
 //   hero-loop.mp4 720p, muted, seamless-ish loop for the landing page (+ hero-poster.jpg)
-//   node promo/edit.mjs [trailer|teaser|tweets|hero]
+//   still-*.png   named screenshots picked from the shots' saved frames
+//   node promo/edit.mjs [trailer|teaser|tweets|hero|stills]
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -69,17 +70,23 @@ const lower = (name, at = 0.4, dur = 3.6) => ({ name: "lower-" + name, at, dur }
 if (want("trailer")) {
   cut([
     { clip: "intro", ss: 0, t: 10, cards: [{ name: "title", at: 4.6, dur: 4.6 }] },
-    { clip: "coaster-pov", ss: 0.3, t: 7.5, cards: [lower("coaster", 0.6, 4)] },
+    { clip: "coaster-pov", ss: 0.3, t: 7, cards: [lower("coaster", 0.6, 4)] },
     { clip: "coaster-chase", ss: 2.3, t: 4.3 },
     { clip: "coaster-loop", ss: 1.5, t: 3.5 },
-    { clip: "drop-pov", ss: 1, t: 6.5, cards: [lower("drop", 0.4, 3.6)] },
-    { clip: "drop-ground", ss: 5, t: 4.5 },
-    { clip: "wheel", ss: 0.5, t: 4.5, cards: [lower("wheel")] },
-    { clip: "wheel-top", ss: 1, t: 4 },
-    { clip: "carousel", ss: 1, t: 5, cards: [lower("carousel")] },
-    { clip: "bumper", ss: 1, t: 7.5, cards: [lower("bumper", 0.4, 4)] },
-    { clip: "plaza", ss: 0.2, t: 8.5, cards: [lower("plaza", 0.4, 3.6), lower("together", 4.6, 3.6)] },
-    { clip: "darts", ss: 0.2, t: 5, cards: [lower("darts")] },
+    { clip: "drop-pov", ss: 1, t: 6, cards: [lower("drop", 0.4, 3.6)] },
+    { clip: "drop-ground", ss: 4.5, t: 4.5 },
+    { clip: "ship", ss: 3, t: 5.5, cards: [lower("ship", 0.4, 3.8)] },
+    { clip: "ship-pov", ss: 1, t: 4.5 },
+    { clip: "swing", ss: 2.5, t: 5.5, cards: [lower("swing", 0.4, 3.8)] },
+    { clip: "swing-under", ss: 1, t: 4 },
+    { clip: "wheel", ss: 2.5, t: 4, cards: [lower("wheel", 0.4, 3.2)] },
+    { clip: "wheel-top", ss: 1, t: 3.5 },
+    { clip: "carousel", ss: 1, t: 4.5, cards: [lower("carousel", 0.4, 3.4)] },
+    { clip: "teacups", ss: 1, t: 5, cards: [lower("teacups", 0.4, 3.8)] },
+    { clip: "bumper", ss: 1, t: 6.5, cards: [lower("bumper", 0.4, 4)] },
+    { clip: "fountain", ss: 0.5, t: 9, cards: [lower("fountain", 0.4, 3.8), lower("together", 4.8, 3.8)] },
+    { clip: "plaza", ss: 0.2, t: 5.5, cards: [lower("plaza", 0.4, 4.2)] },
+    { clip: "darts", ss: 0.2, t: 4.5, cards: [lower("darts", 0.4, 3.4)] },
     { clip: "outro", ss: 0, t: 9, cards: [{ name: "end", at: 2.2 }] },
   ], path.join(FINAL, "trailer.mp4"));
 }
@@ -88,17 +95,22 @@ if (want("teaser")) {
   cut([
     { clip: "intro", ss: 3.2, t: 5, cards: [{ name: "title", at: 1.3, dur: 3.5 }] },
     { clip: "coaster-pov", ss: 1.5, t: 4.5 },
-    { clip: "coaster-chase", ss: 3, t: 3.2 },
+    { clip: "ship", ss: 4, t: 3.5 },
     { clip: "drop-pov", ss: 2.5, t: 3.5 },
-    { clip: "bumper", ss: 2, t: 3.5 },
-    { clip: "plaza", ss: 1, t: 3 },
+    { clip: "swing", ss: 4, t: 3.5 },
+    { clip: "bumper", ss: 2, t: 3.2 },
+    { clip: "fountain", ss: 3, t: 4 },
     { clip: "outro", ss: 2, t: 5, cards: [{ name: "end", at: 0.6 }] },
   ], path.join(FINAL, "teaser.mp4"));
 }
 
 if (want("tweets")) {
-  // one clip per tweet in the thread, watermarked
-  const T = [["coaster", ["coaster-pov", 0, 11]], ["drop", ["drop-pov", 0, 9]], ["bumper", ["bumper", 0, 11]], ["plaza", ["plaza", 0, 9.5]], ["wheel", ["wheel-top", 0, 7]], ["chase", ["coaster-chase", 0, 6.6]]];
+  // one clip per tweet, watermarked: [name, [shot, start, seconds]]
+  const T = [
+    ["coaster", ["coaster-pov", 0, 11]], ["drop", ["drop-pov", 0, 9]], ["bumper", ["bumper", 0, 11]], ["plaza", ["plaza", 0, 9.5]],
+    ["wheel", ["wheel-top", 0, 7]], ["chase", ["coaster-chase", 0, 6.6]], ["ship", ["ship", 0, 9]], ["swing", ["swing", 0, 9]],
+    ["teacups", ["teacups", 0, 9]], ["fountain", ["fountain", 0, 11]],
+  ];
   for (const [name, [c, ss, t]] of T) {
     if (!existsSync(clip(c))) { console.log("skip", c); continue; }
     ff(["-ss", String(ss), "-t", String(t), "-i", clip(c), "-i", card("watermark"),
@@ -114,4 +126,18 @@ if (want("hero")) {
     `[0:v]settb=1/30,setpts=PTS-STARTPTS,fps=30,scale=1280:720:flags=lanczos,format=yuv420p[a];[1:v]settb=1/30,setpts=PTS-STARTPTS,fps=30,scale=1280:720:flags=lanczos,format=yuv420p[b];[a][b]xfade=transition=fade:duration=${xf}:offset=${d - 2 * xf}[o]`,
     "-map", "[o]", "-c:v", "libx264", "-preset", "slow", "-crf", "26", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", path.join(FINAL, "hero-loop.mp4")]);
   ff(["-i", path.join(FINAL, "hero-loop.mp4"), "-frames:v", "1", "-q:v", "3", path.join(FINAL, "hero-poster.jpg")]);
+}
+
+if (want("stills")) {
+  // final name -> <shot>-<frame>.png saved by shots.mjs
+  const STILLS = {
+    intro: "intro-330", gate: "intro-0", coaster: "coaster-loop-90", "coaster-riders": "coaster-chase-200",
+    "coaster-pov": "coaster-pov-130", drop: "drop-pov-40", "drop-ground": "drop-ground-200", ship: "ship-80",
+    "ship-pov": "ship-pov-160", swing: "swing-150", "swing-under": "swing-under-100", wheel: "wheel-120",
+    "wheel-top": "wheel-top-100", carousel: "carousel-120", teacups: "teacups-250", bumper: "bumper-90",
+    fountain: "fountain-230", plaza: "plaza-250", darts: "darts-100", outro: "outro-150",
+  };
+  for (const f of readdirSync(FINAL).filter((f) => f.startsWith("still-"))) rmSync(path.join(FINAL, f));
+  for (const [name, src] of Object.entries(STILLS)) copyFileSync(path.join(OUT, src + ".png"), path.join(FINAL, `still-${name}.png`));
+  console.log(`${Object.keys(STILLS).length} stills`);
 }
